@@ -2,6 +2,7 @@
 
 module NLP.Nerf
 ( train
+, tag
 ) where
 
 import Control.Applicative ((<$>), (<*>))
@@ -25,7 +26,7 @@ import Text.Named.Enamex (parseEnamex)
 import qualified Data.Named.Tree as Tr
 import qualified Data.Named.IOB as IOB
 
-import qualified Data.CRF as CRF
+import qualified Data.CRF.Chain1 as CRF
 
 type Word = String
 type NE = String
@@ -54,33 +55,45 @@ schema sent = \k -> do
     lowPrefix i j = Ox.prefix j =<< lowOrth i
     lowSuffix i j = Ox.suffix j =<< lowOrth i
 
-schematize :: Tr.NeForest NE Word -> CRF.SentL Ob Lb
-schematize forest =
-    [ CRF.annotate y (S.fromList x)
+schematize :: [Word] -> CRF.Sent Ob
+schematize xs =
+    map (S.fromList . execOx . schema v) [0 .. n - 1]
+  where
+    v = V.fromList xs
+    n = V.length v
+
+flatten :: Tr.NeForest NE Word -> CRF.SentL Ob Lb
+flatten forest =
+    [ CRF.annotate x y
     | (x, y) <- zip xs ys ]
   where
     iob = IOB.encodeForest forest
-    ox = schema (V.fromList $ map IOB.word iob)
-    xs = map (execOx . ox) [0 .. length iob - 1]
+    xs = schematize (map IOB.word iob)
     ys = map IOB.label iob
 
 readData :: FilePath -> IO [CRF.SentL Ob Lb]
 readData path
-    = map schematize
+    = map flatten
     . map (mapForest toString)
     . parseEnamex
    <$> L.readFile path
   where
     toString = Tr.onBoth (L.unpack . L.fromStrict)
 
--- | Train the CRF model
+-- | Train the CRF model.
 train
-    :: SgdArgs                      -- ^ Args for SGD
-    -> FilePath                     -- ^ Train data (ENAMEX)
-    -> Maybe FilePath               -- ^ Maybe eval data (ENAMEX)
-    -> IO (CRF.Codec Ob Lb, CRF.Model)    -- ^ Resulting codec and model
+    :: SgdArgs              -- ^ Args for SGD
+    -> FilePath             -- ^ Train data (ENAMEX)
+    -> Maybe FilePath       -- ^ Maybe eval data (ENAMEX)
+    -> IO (CRF.CRF Ob Lb)   -- ^ Resulting codec and model
 train sgdArgs trainPath evalPathM = do
     let readTrain = readData trainPath
         readEvalM = evalPathM >>= \evalPath ->
             Just ([], readData evalPath)
     CRF.train sgdArgs readTrain readEvalM CRF.presentFeats
+
+-- | Tag with the CRF model.
+tag :: CRF.CRF Ob Lb -> [Word] -> Tr.NeForest NE Word
+tag crf words = 
+    let xs = CRF.tag crf (schematize words)
+    in  IOB.decodeForest [IOB.IOB w x | (w, x) <- zip words xs]
