@@ -1,0 +1,39 @@
+name:               nerf-chain
+version:            0.1.0
+synopsis:           Named entity recognition tool based on linear-chain CRFs
+description:
+    TODO
+license:            BSD3
+license-file:       LICENSE
+cabal-version:      >= 1.6
+copyright:          Copyright (c) 2012 IPI PAN
+author:             Jakub Waszczuk
+maintainer:         waszczuk.kuba@gmail.com
+stability:          experimental
+category:           Natural Language Processing
+homepage:           https://github.com/kawu/nerf-chain
+build-type:         Simple
+
+library
+    build-depends:
+        base >= 4 && < 5
+      , containers
+      , vector
+      , text
+      , binary
+      , text-binary
+      , polysoup >= 0.1 && < 0.2
+      , crf-chain1 >= 0.2 && < 0.3
+      , data-named >= 0.4 && < 0.5
+      , monad-ox >= 0.2 && < 0.3
+      , sgd >= 0.2.1 && < 0.3
+
+    exposed-modules:
+        NLP.Nerf
+      , NLP.Nerf.Dict.LMF
+
+    ghc-options: -Wall -O2
+
+source-repository head
+    type: git
+    location: git://github.com/kawu/nerf-chain.git

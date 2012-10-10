@@ -1,17 +1,14 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Main module of the Nerf tool.
+
 module NLP.Nerf
 ( train
 , tag
 ) where
 
 import Control.Applicative ((<$>), (<*>))
-import Control.Monad (forM_)
-import Control.Monad.Lazy (forM)
-import Control.Arrow (second)
-import Data.Maybe (mapMaybe)
-import System.IO (hSetBuffering, stdout, BufferMode (..))
 import qualified Data.Char as C
 import qualified Data.Set as S
 import qualified Data.Vector as V
@@ -21,7 +18,6 @@ import qualified Data.Text.Lazy.IO as L
 import qualified Control.Monad.Ox as Ox
 import qualified Control.Monad.Ox.Text as Ox
 
-import Data.Named.Tree (mapForest)
 import Text.Named.Enamex (parseEnamex)
 import qualified Data.Named.Tree as Tr
 import qualified Data.Named.IOB as IOB
@@ -96,6 +92,6 @@ train sgdArgs trainPath evalPathM = do
 
 -- | Tag with the CRF model.
 tag :: CRF.CRF Ob Lb -> [Word] -> Tr.NeForest NE Word
-tag crf words = 
-    let xs = CRF.tag crf (schematize words)
-    in  IOB.decodeForest [IOB.IOB w x | (w, x) <- zip words xs]
+tag crf ws = 
+    let xs = CRF.tag crf (schematize ws)
+    in  IOB.decodeForest [IOB.IOB w x | (w, x) <- zip ws xs]
