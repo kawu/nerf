@@ -28,7 +28,7 @@ import qualified Data.Named.IOB as IOB
 import Numeric.SGD (SgdArgs)
 import qualified Data.CRF.Chain1 as CRF
 
-import qualified NLP.Nerf.Dict.LMF as LMF
+import qualified NLP.Nerf.Dict.Base as Dict
 
 type Word = T.Text
 type NE = T.Text
@@ -36,7 +36,7 @@ type Ob = ([Int], T.Text)
 type Lb = IOB.Label T.Text
 
 -- | TODO: Add dictionary lookup.
-schema :: LMF.NeDict -> V.Vector Word -> Int -> Ox.Ox Word T.Text ()
+schema :: Dict.NeDict -> V.Vector Word -> Int -> Ox.Ox Word T.Text ()
 schema dict sent = \k -> do
     mapM_ (Ox.saves . searchDict)   [k - 1, k]
     mapM_ (Ox.save . lowOrth)       [k - 1, k]
@@ -72,14 +72,14 @@ schema dict sent = \k -> do
     lowPrefix i j = Ox.prefix j =<< lowOrth i
     lowSuffix i j = Ox.suffix j =<< lowOrth i
 
-schematize :: LMF.NeDict -> [Word] -> CRF.Sent Ob
+schematize :: Dict.NeDict -> [Word] -> CRF.Sent Ob
 schematize dict xs =
     map (S.fromList . Ox.execOx . schema dict v) [0 .. n - 1]
   where
     v = V.fromList xs
     n = V.length v
 
-flatten :: LMF.NeDict -> Tr.NeForest NE Word -> CRF.SentL Ob Lb
+flatten :: Dict.NeDict -> Tr.NeForest NE Word -> CRF.SentL Ob Lb
 flatten dict forest =
     [ CRF.annotate x y
     | (x, y) <- zip xs ys ]
@@ -88,7 +88,7 @@ flatten dict forest =
     xs = schematize dict (map IOB.word iob)
     ys = map IOB.label iob
 
-readFlat :: LMF.NeDict -> FilePath -> IO [CRF.SentL Ob Lb]
+readFlat :: Dict.NeDict -> FilePath -> IO [CRF.SentL Ob Lb]
 readFlat dict path = map (flatten dict) . parseEnamex <$> L.readFile path
 
 drawSent :: CRF.SentL Ob Lb -> IO ()
@@ -100,7 +100,7 @@ drawSent sent = do
 -- | Train the CRF model.
 train
     :: SgdArgs              -- ^ Args for SGD
-    -> LMF.NeDict           -- ^ LMF dictionary
+    -> Dict.NeDict          -- ^ LMF dictionary
     -> FilePath             -- ^ Train data (ENAMEX)
     -> Maybe FilePath       -- ^ Maybe eval data (ENAMEX)
     -> IO (CRF.CRF Ob Lb)   -- ^ Resulting codec and model
@@ -111,7 +111,7 @@ train sgdArgs dict trainPath evalPathM = do
     CRF.train sgdArgs readTrain readEvalM CRF.presentFeats
 
 -- | Tag with the CRF model.
-tag :: LMF.NeDict -> CRF.CRF Ob Lb -> [Word] -> Tr.NeForest NE Word
+tag :: Dict.NeDict -> CRF.CRF Ob Lb -> [Word] -> Tr.NeForest NE Word
 tag dict crf ws =
     let xs = CRF.tag crf (schematize dict ws)
     in  IOB.decodeForest [IOB.IOB w x | (w, x) <- zip ws xs]

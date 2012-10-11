@@ -27,10 +27,15 @@ library
       , data-named >= 0.4 && < 0.5
       , monad-ox >= 0.2 && < 0.3
       , sgd >= 0.2.1 && < 0.3
+      , polimorf >= 0.3.1 && < 0.4
+      , adict >= 0.1 && < 0.2
 
     exposed-modules:
         NLP.Nerf
+      , NLP.Nerf.Dict
+      , NLP.Nerf.Dict.Base
       , NLP.Nerf.Dict.LMF
+      , NLP.Nerf.Dict.NELexicon
 
     ghc-options: -Wall -O2
 
