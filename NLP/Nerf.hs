@@ -5,7 +5,7 @@
 
 module NLP.Nerf
 ( train
-, tag
+, ner
 ) where
 
 import Control.Applicative ((<$>), (<*>))
@@ -111,7 +111,7 @@ train sgdArgs dict trainPath evalPathM = do
     CRF.train sgdArgs readTrain readEvalM CRF.presentFeats
 
 -- | Tag with the CRF model.
-tag :: Dict.NeDict -> CRF.CRF Ob Lb -> [Word] -> Tr.NeForest NE Word
-tag dict crf ws =
+ner :: Dict.NeDict -> CRF.CRF Ob Lb -> [Word] -> Tr.NeForest NE Word
+ner dict crf ws =
     let xs = CRF.tag crf (schematize dict ws)
     in  IOB.decodeForest [IOB.IOB w x | (w, x) <- zip ws xs]
