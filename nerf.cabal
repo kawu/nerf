@@ -1,4 +1,4 @@
-name:               nerf-chain
+name:               nerf
 version:            0.1.0
 synopsis:           Named entity recognition tool based on linear-chain CRFs
 description:
@@ -11,7 +11,7 @@ author:             Jakub Waszczuk
 maintainer:         waszczuk.kuba@gmail.com
 stability:          experimental
 category:           Natural Language Processing
-homepage:           https://github.com/kawu/nerf-chain
+homepage:           https://github.com/kawu/nerf
 build-type:         Simple
 
 library
@@ -44,8 +44,8 @@ library
 
 source-repository head
     type: git
-    location: git://github.com/kawu/nerf-chain.git
+    location: git://github.com/kawu/nerf.git
 
-Executable nerf-chain
+Executable nerf
   Hs-Source-Dirs: ., tools
-  Main-is: nerf-chain.hs
+  Main-is: nerf.hs
