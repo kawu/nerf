@@ -3,12 +3,12 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
 
-import Control.Monad (forM_)
+import Control.Monad (forM_, when)
 import System.Console.CmdArgs
 import Data.Binary (encodeFile, decodeFile)
 import Data.Text.Binary ()
-import Numeric.SGD (sgdArgsDefault)
 import Text.Named.Enamex (showForest)
+import qualified Numeric.SGD as SGD
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as L
 import qualified Data.Text.Lazy.IO as L
@@ -25,7 +25,7 @@ data Args
     , iterNum       :: Double
     , batchSize     :: Int
     , regVar        :: Double
-    , scale0        :: Double
+    , gain0         :: Double
     , tau           :: Double
     , outNerf       :: FilePath }
   | NerMode
@@ -51,7 +51,7 @@ trainMode = TrainMode
     , iterNum = 10 &= help "Number of SGD iterations"
     , batchSize = 30 &= help "Batch size"
     , regVar = 10.0 &= help "Regularization variance"
-    , scale0 = 1.0 &= help "Initial scale parameter"
+    , gain0 = 1.0 &= help "Initial gain parameter"
     , tau = 5.0 &= help "Initial tau parameter"
     , outNerf = def &= typFile &= help "Output Nerf file" }
 
@@ -88,11 +88,19 @@ main = do
 
 exec :: Args -> IO ()
 
--- | FIXME: Do not ignore SGD arguments.
 exec TrainMode{..} = do
     cfg  <- defaultCfg neDictPath
-    nerf <- train sgdArgsDefault cfg trainPath evalPath
-    encodeFile outNerf nerf
+    nerf <- train sgdArgs cfg trainPath evalPath
+    when (not . null $ outNerf) $ do
+        putStrLn $ "\nSaving model in " ++ outNerf ++ "..."
+        encodeFile outNerf nerf
+  where
+    sgdArgs = SGD.SgdArgs
+        { SGD.batchSize = batchSize
+        , SGD.regVar = regVar
+        , SGD.iterNum = iterNum
+        , SGD.gain0 = gain0
+        , SGD.tau = tau }
 
 exec NerMode{..} = do
     nerf  <- decodeFile inNerf
