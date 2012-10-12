@@ -82,9 +82,7 @@ argModes :: Mode (CmdArgs Args)
 argModes = cmdArgsMode $ modes [trainMode, nerMode, oxMode, pnegMode, neLexMode]
 
 main :: IO ()
-main = do
-    args <- cmdArgsRun argModes
-    exec args
+main = exec =<< cmdArgsRun argModes
 
 exec :: Args -> IO ()
 

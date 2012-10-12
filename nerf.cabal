@@ -57,6 +57,7 @@ source-repository head
     type: git
     location: git://github.com/kawu/nerf.git
 
-Executable nerf
-  Hs-Source-Dirs: ., tools
-  Main-is: nerf.hs
+executable nerf
+  hs-source-dirs: ., tools
+  main-is: nerf.hs
+  ghc-options: -Wall -O2 -threaded
