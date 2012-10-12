@@ -13,8 +13,9 @@ import qualified Data.Text as T
 import qualified Data.Text.Lazy as L
 import qualified Data.Text.Lazy.IO as L
 
-import NLP.Nerf (train, ner)
-import NLP.Nerf.Dict (prepareLMF, prepareNeLexicon)
+import NLP.Nerf (train, ner, tryOx)
+import NLP.Nerf.Schema (defaultCfg)
+import NLP.Nerf.Dict (preparePNEG, prepareNELexicon)
 
 data Args
   = TrainMode
@@ -26,12 +27,14 @@ data Args
     , regVar        :: Double
     , scale0        :: Double
     , tau           :: Double
-    , outModel      :: FilePath }
+    , outNerf       :: FilePath }
   | NerMode
     { dataPath      :: FilePath
-    , neDictPath    :: FilePath
-    , loadModel     :: FilePath }
-  | LmfMode
+    , inNerf        :: FilePath }
+  | OxMode
+    { dataPath      :: FilePath
+    , neDictPath    :: FilePath }
+  | PnegMode
     { lmfPath       :: FilePath
     , outPath       :: FilePath }
   | NeLexMode
@@ -50,18 +53,23 @@ trainMode = TrainMode
     , regVar = 10.0 &= help "Regularization variance"
     , scale0 = 1.0 &= help "Initial scale parameter"
     , tau = 5.0 &= help "Initial tau parameter"
-    , outModel = def &= typFile &= help "Output CRF file" }
+    , outNerf = def &= typFile &= help "Output Nerf file" }
 
 nerMode :: Args
 nerMode = NerMode
-    { loadModel = def &= argPos 0 &= typ "CRF"
-    , neDictPath = def &= argPos 1 &= typ "NE-DICT-FILE"
-    , dataPath = def &= typFile &= help "Input" }
-        -- &= help "Input file; if not specified, read from stdin" }
+    { inNerf = def &= argPos 0 &= typ "NERF-FILE"
+    , dataPath = def &= argPos 2 &= typ "INPUT" }
+--     , dataPath = def &= typFile &= help "Input" }
+--         &= help "Input file; if not specified, read from stdin" }
 
-lmfMode :: Args
-lmfMode = LmfMode
-    { lmfPath = def &= typ "LMF" &= argPos 0
+oxMode :: Args
+oxMode = OxMode
+    { dataPath = def &= argPos 0 &= typ "DATA-FILE"
+    , neDictPath = def &= argPos 1 &= typ "NE-DICT-FILE" }
+
+pnegMode :: Args
+pnegMode = PnegMode
+    { lmfPath = def &= typ "PNEG" &= argPos 0
     , outPath = def &= typ "Output" &= argPos 1 }
 
 neLexMode :: Args
@@ -71,7 +79,7 @@ neLexMode = NeLexMode
     , outPath = def &= typ "Output" &= argPos 2 }
 
 argModes :: Mode (CmdArgs Args)
-argModes = cmdArgsMode $ modes [trainMode, nerMode, lmfMode, neLexMode]
+argModes = cmdArgsMode $ modes [trainMode, nerMode, oxMode, pnegMode, neLexMode]
 
 main :: IO ()
 main = do
@@ -82,20 +90,23 @@ exec :: Args -> IO ()
 
 -- | FIXME: Do not ignore SGD arguments.
 exec TrainMode{..} = do
-    neDict <- decodeFile neDictPath
-    crf <- train sgdArgsDefault neDict trainPath evalPath
-    encodeFile outModel crf
+    cfg  <- defaultCfg neDictPath
+    nerf <- train sgdArgsDefault cfg trainPath evalPath
+    encodeFile outNerf nerf
 
 exec NerMode{..} = do
-    neDict <- decodeFile neDictPath
-    crf <- decodeFile loadModel
+    nerf  <- decodeFile inNerf
     input <- readRaw dataPath
     forM_ input $ \sent -> do
-        let forest = ner neDict crf sent
+        let forest = ner nerf sent
         L.putStrLn (showForest forest)
 
-exec LmfMode{..} = prepareLMF lmfPath outPath
-exec NeLexMode{..} = prepareNeLexicon nePath poliPath outPath
+exec OxMode{..} = do
+    cfg  <- defaultCfg neDictPath
+    tryOx cfg dataPath
+
+exec PnegMode{..} = preparePNEG lmfPath outPath
+exec NeLexMode{..} = prepareNELexicon nePath poliPath outPath
 
 parseRaw :: L.Text -> [[T.Text]]
 parseRaw =

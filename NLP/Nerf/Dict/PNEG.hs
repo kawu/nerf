@@ -4,9 +4,9 @@
 -- | Parsing the Gazetteer for Polish Named Entities (used formerly within
 -- the SProUT platform) in the LMF format.
 
-module NLP.Nerf.Dict.LMF
-( parseLmf
-, readLmf
+module NLP.Nerf.Dict.PNEG
+( parsePNEG
+, readPNEG
 ) where
 
 import Text.XML.PolySoup
@@ -36,9 +36,9 @@ featP :: L.Text -> XmlParser L.Text T.Text
 featP x = L.toStrict <$> cut (tag "feat" *> hasAttr "att" x *> getAttr "val")
 
 -- | Parse the dictionary to the list of entries.
-parseLmf :: L.Text -> [Entry]
-parseLmf = parseXml lmfP
+parsePNEG :: L.Text -> [Entry]
+parsePNEG = parseXml lmfP
 
 -- | Read the dictionary from the file.
-readLmf :: FilePath -> IO [Entry]
-readLmf = fmap parseLmf . L.readFile
+readPNEG :: FilePath -> IO [Entry]
+readPNEG = fmap parsePNEG . L.readFile

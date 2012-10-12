@@ -1,6 +1,7 @@
 module NLP.Nerf.Dict
-( prepareLMF
-, prepareNeLexicon
+( preparePNEG
+, prepareNELexicon
+, module NLP.Nerf.Dict.Base
 ) where
 
 import Control.Applicative ((<$>))
@@ -11,8 +12,8 @@ import qualified Data.Map as M
 import qualified Data.Text as T
 
 import NLP.Nerf.Dict.Base
-import NLP.Nerf.Dict.LMF (readLmf)
-import NLP.Nerf.Dict.NELexicon (readNeLexicon)
+import NLP.Nerf.Dict.PNEG (readPNEG)
+import NLP.Nerf.Dict.NELexicon (readNELexicon)
 import qualified NLP.Adict.Trie as Trie
 
 -- | Make dictionary consisting only from one word NEs.
@@ -21,25 +22,25 @@ mkDictW1 =
     let oneWord x _ = not (isMultiWord x)
     in  siftDict oneWord . mkDict
 
--- | Parse the LMF dictionary and save it in a binary form into
+-- | Parse the PNEG dictionary and save it in a binary form into
 -- the output file.
-prepareLMF
-    :: FilePath     -- ^ Path to LMF
+preparePNEG
+    :: FilePath     -- ^ Path to PNEG in the LMF format
     -> FilePath     -- ^ Output file
     -> IO ()
-prepareLMF lmfPath outPath = do
-    neDict <- mkDictW1 <$> readLmf lmfPath
+preparePNEG lmfPath outPath = do
+    neDict <- mkDictW1 <$> readPNEG lmfPath
     saveDict outPath neDict
 
 -- | Parse the NELexicon, merge it with the PoliMorf and serialize
 -- into a binary, DAWG form.
-prepareNeLexicon
+prepareNELexicon
     :: FilePath     -- ^ Path to NELexicon
     -> FilePath     -- ^ Path to PoliMorf
     -> FilePath     -- ^ Output file
     -> IO ()
-prepareNeLexicon nePath poliPath outPath = do
-    neDict  <- mkDictW1 <$> readNeLexicon nePath
+prepareNELexicon nePath poliPath outPath = do
+    neDict  <- mkDictW1 <$> readNELexicon nePath
     baseMap <- Poli.mkBaseMap <$> Poli.readPoliMorf poliPath
     let neDict' = Poli.merge baseMap neDict
         trie    = Trie.fromList $ map (first T.unpack) (M.assocs neDict')

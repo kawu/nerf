@@ -33,9 +33,11 @@ library
 
     exposed-modules:
         NLP.Nerf
+      , NLP.Nerf.Types
+      , NLP.Nerf.Schema
       , NLP.Nerf.Dict
       , NLP.Nerf.Dict.Base
-      , NLP.Nerf.Dict.LMF
+      , NLP.Nerf.Dict.PNEG
       , NLP.Nerf.Dict.NELexicon
 
     ghc-options: -Wall -O2
