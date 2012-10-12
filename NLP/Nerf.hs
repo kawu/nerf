@@ -52,7 +52,7 @@ drawSent sent = do
     mapM_ (print . unDist) sent
     putStrLn "" 
 
--- | Show the observation extraction output.
+-- | Show results of observation extraction on the input ENAMEX file.
 tryOx :: SchemaCfg -> FilePath -> IO ()
 tryOx cfg path = do
     input <- readFlat (fromCfg cfg) path
@@ -73,7 +73,7 @@ train sgdArgs cfg trainPath evalPathM = do
     _crf <- CRF.train sgdArgs readTrain readEvalM CRF.presentFeats
     return $ Nerf cfg _crf
 
--- | Perform named entity recognition (NER) with the Nerf.
+-- | Perform named entity recognition (NER) using the Nerf.
 ner :: Nerf -> [Word] -> Tr.NeForest NE Word
 ner nerf ws =
     let schema = fromCfg (schemaCfg nerf)
