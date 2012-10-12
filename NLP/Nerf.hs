@@ -58,7 +58,7 @@ tryOx cfg path = do
     input <- readFlat (fromCfg cfg) path
     mapM_ drawSent input
 
--- | Training Nerf.
+-- | Train Nerf on the input data using the SGD method.
 train
     :: SgdArgs              -- ^ Args for SGD
     -> SchemaCfg            -- ^ Observation schema configuration
