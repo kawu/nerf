@@ -23,15 +23,15 @@ import Numeric.SGD (SgdArgs)
 import qualified Data.CRF.Chain1 as CRF
 
 import NLP.Nerf.Types
-import NLP.Nerf.Schema (SchemaCfg, Schema, fromCfg, schematize)
+import NLP.Nerf.Schema (SchemaConf, Schema, fromConf, schematize)
 
 -- | A Nerf consists of the observation schema configuration and the CRF model.
 data Nerf = Nerf
-    { schemaCfg :: SchemaCfg
-    , crf       :: CRF.CRF Ob Lb }
+    { schemaConf    :: SchemaConf
+    , crf           :: CRF.CRF Ob Lb }
 
 instance Binary Nerf where
-    put Nerf{..} = put schemaCfg >> put crf
+    put Nerf{..} = put schemaConf >> put crf
     get = Nerf <$> get <*> get
 
 flatten :: Schema a -> Tr.NeForest NE Word -> CRF.SentL Ob Lb
@@ -53,20 +53,20 @@ drawSent sent = do
     putStrLn "" 
 
 -- | Show results of observation extraction on the input ENAMEX file.
-tryOx :: SchemaCfg -> FilePath -> IO ()
+tryOx :: SchemaConf -> FilePath -> IO ()
 tryOx cfg path = do
-    input <- readFlat (fromCfg cfg) path
+    input <- readFlat (fromConf cfg) path
     mapM_ drawSent input
 
 -- | Train Nerf on the input data using the SGD method.
 train
     :: SgdArgs              -- ^ Args for SGD
-    -> SchemaCfg            -- ^ Observation schema configuration
+    -> SchemaConf           -- ^ Observation schema configuration
     -> FilePath             -- ^ Train data (ENAMEX)
     -> Maybe FilePath       -- ^ Maybe eval data (ENAMEX)
     -> IO Nerf              -- ^ Nerf with resulting codec and model
 train sgdArgs cfg trainPath evalPathM = do
-    let schema = fromCfg cfg
+    let schema = fromConf cfg
         readTrain = readFlat schema trainPath
         readEvalM = evalPathM >>= \evalPath ->
             Just ([], readFlat schema evalPath)
@@ -76,6 +76,6 @@ train sgdArgs cfg trainPath evalPathM = do
 -- | Perform named entity recognition (NER) using the Nerf.
 ner :: Nerf -> [Word] -> Tr.NeForest NE Word
 ner nerf ws =
-    let schema = fromCfg (schemaCfg nerf)
+    let schema = fromConf (schemaConf nerf)
         xs = CRF.tag (crf nerf) (schematize schema ws)
     in  IOB.decodeForest [IOB.IOB w x | (w, x) <- zip ws xs]

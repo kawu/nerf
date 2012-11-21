@@ -17,19 +17,28 @@ module NLP.Nerf.Schema
 -- * Building schema
 
 -- ** From config
-, SchemaCfg (..)
-, defaultCfg
-, fromCfg
+, Body (..)
+, Entry
+, entry
+, entryWith
+, SchemaConf (..)
+, nullConf
+, defaultConf
+, fromConf
 
 -- ** Schema blocks
 , Block
 , fromBlock
-, orthS
-, lemmaS
-, shapeS
-, shapePairS
-, suffixS
-, searchS
+, orthB
+, splitOrthB
+, lowPrefixesB
+, lowSuffixesB
+, lemmaB
+, shapeB
+, packedB
+, shapePairB
+, packedPairB
+, searchB
 ) where
 
 import Control.Applicative ((<$>), (<*>))
@@ -85,17 +94,23 @@ mkBaseOb sent = BaseOb
 -- context of the sentence and the list of absolute sentence positions.
 type Block a = V.Vector Word -> [Int] -> Ox a
 
--- | Transform the block to the schema dependent on the list of
+-- | Transform the block to the schema depending on the list of
 -- relative sentence positions.
 fromBlock :: Block a -> [Int] -> Schema a
 fromBlock blk xs sent =
     let blkSent = blk sent
     in  \k -> blkSent [x + k | x <- xs]
 
--- | Orthographic observations determined with respect to the
--- list of relative positions.
-orthS :: Block ()
-orthS sent = \ks -> do
+-- | Orthographic form at the current position.
+orthB :: Block ()
+orthB sent = \ks ->
+    let orthOb = Ox.atWith sent id
+    in  mapM_ (Ox.save . orthOb) ks
+
+-- | Orthographic form split into two observations: the lowercased form and
+-- the original form (only when different than the lowercased one).
+splitOrthB :: Block ()
+splitOrthB sent = \ks -> do
     mapM_ (Ox.save . lowOrth)    ks
     mapM_ (Ox.save . upOnlyOrth) ks
   where
@@ -104,35 +119,83 @@ orthS sent = \ks -> do
         True    -> Just x
         False   -> Nothing
 
--- | Lemma substitute determined with respect to the list of
--- relative positions.
-lemmaS :: Block ()
-lemmaS sent = \ks -> do
+-- | List of lowercased prefixes of given lengths.
+lowPrefixesB :: [Int] -> Block ()
+lowPrefixesB ns sent = \ks ->
+    forM_ ks $ \i ->
+        mapM_ (Ox.save . lowPrefix i) ns
+  where
+    BaseOb{..}      = mkBaseOb sent
+    lowPrefix i j   = Ox.prefix j =<< lowOrth i
+
+-- | List of lowercased suffixes of given lengths.
+lowSuffixesB :: [Int] -> Block ()
+lowSuffixesB ns sent = \ks ->
+    forM_ ks $ \i ->
+        mapM_ (Ox.save . lowSuffix i) ns -- [2, 3, 4]
+  where
+    BaseOb{..}      = mkBaseOb sent
+    lowSuffix i j   = Ox.suffix j =<< lowOrth i
+
+-- TODO: Implement lemmaB on top of lowSuffixB and logPrefixB.
+
+-- | Lemma substitute parametrized by the number specifying the span
+-- over which lowercased prefixes and suffixes will be 'Ox.save'd.
+-- For example, @lemmaB 2@ will take affixes of lengths @0, -1@ and @-2@
+-- on account.
+lemmaB :: Int -> Block ()
+lemmaB n sent = \ks -> do
     mapM_ lowLemma ks
   where
     BaseOb{..}      = mkBaseOb sent
     lowPrefix i j   = Ox.prefix j =<< lowOrth i
     lowSuffix i j   = Ox.suffix j =<< lowOrth i
     lowLemma i = Ox.group $ do
-        mapM_ (Ox.save . lowPrefix i) [0, -1, -2, -3]
-        mapM_ (Ox.save . lowSuffix i) [0, -1, -2, -3]
+        mapM_ (Ox.save . lowPrefix i) [0, -1 .. -n] -- [0, -1, -2, -3]
+        mapM_ (Ox.save . lowSuffix i) [0, -1 .. -n]
 
--- | Shape and packed shape determined with respect to the list of
--- relative positions.
-shapeS :: Block ()
-shapeS sent = \ks -> do
-    mapM_ (Ox.save . shape)  ks
+-- | Shape of the word.
+shapeB :: Block ()
+shapeB sent = \ks -> do
+    mapM_ (Ox.save . shape) ks
+  where
+    BaseOb{..}      = mkBaseOb sent
+    shape i         = Ox.shape <$> orth i
+
+-- | Packed shape of the word.
+packedB :: Block ()
+packedB sent = \ks -> do
     mapM_ (Ox.save . shapeP) ks
   where
     BaseOb{..}      = mkBaseOb sent
     shape i         = Ox.shape <$> orth i
     shapeP i        = Ox.pack <$> shape i
 
--- | Shape pairs determined with respect to the list of relative positions.
-shapePairS :: Block ()
-shapePairS sent = \ks ->
+-- -- | Shape and packed shape of the word.
+-- shapeAndPackedB :: Block ()
+-- shapeAndPackedB sent = \ks -> do
+--     mapM_ (Ox.save . shape)  ks
+--     mapM_ (Ox.save . shapeP) ks
+--   where
+--     BaseOb{..}      = mkBaseOb sent
+--     shape i         = Ox.shape <$> orth i
+--     shapeP i        = Ox.pack <$> shape i
+
+-- | Combined shapes of two consecutive (at @k-1@ and @k@ positions) words.
+shapePairB :: Block ()
+shapePairB sent = \ks ->
     forM_ ks $ \i -> do
         Ox.save $ link <$> shape  i <*> shape  (i - 1)
+  where
+    BaseOb{..}      = mkBaseOb sent
+    shape i         = Ox.shape <$> orth i
+    link x y        = T.concat [x, "-", y]
+
+-- | Combined packed shapes of two consecutive (at @k-1@ and @k@ positions)
+-- words.
+packedPairB :: Block ()
+packedPairB sent = \ks ->
+    forM_ ks $ \i -> do
         Ox.save $ link <$> shapeP i <*> shapeP (i - 1)
   where
     BaseOb{..}      = mkBaseOb sent
@@ -140,25 +203,50 @@ shapePairS sent = \ks ->
     shapeP i        = Ox.pack <$> shape i
     link x y        = T.concat [x, "-", y]
 
--- | Several suffixes determined with respect to the list of
--- relative positions.
-suffixS :: Block ()
-suffixS sent = \ks ->
-    forM_ ks $ \i ->
-        mapM_ (Ox.save . lowSuffix i) [2, 3, 4]
-  where
-    BaseOb{..}      = mkBaseOb sent
-    lowSuffix i j   = Ox.suffix j =<< lowOrth i
+-- -- | Shape pairs determined with respect to the list of relative positions.
+-- shapePairB :: Block ()
+-- shapePairB sent = \ks ->
+--     forM_ ks $ \i -> do
+--         Ox.save $ link <$> shape  i <*> shape  (i - 1)
+--         Ox.save $ link <$> shapeP i <*> shapeP (i - 1)
+--   where
+--     BaseOb{..}      = mkBaseOb sent
+--     shape i         = Ox.shape <$> orth i
+--     shapeP i        = Ox.pack <$> shape i
+--     link x y        = T.concat [x, "-", y]
 
 -- | Plain dictionary search determined with respect to the list of
 -- relative positions.
-searchS :: Dict.NeDict -> Block ()
-searchS dict sent = \ks -> do
+searchB :: Dict.NeDict -> Block ()
+searchB dict sent = \ks -> do
     mapM_ (Ox.saves . searchDict) ks
   where
     BaseOb{..}      = mkBaseOb sent
     searchDict i    = join . maybeToList $
         S.toList <$> (orth i >>= flip M.lookup dict)
+
+-- | Body of configuration entry.
+data Body a = Body {
+    -- | Range argument for the schema block. 
+      range :: [Int]
+    -- | Additional arguments for the schema block.
+    , args  :: a }
+    deriving (Show)
+
+instance Binary a => Binary (Body a) where
+    put Body{..} = put range >> put args
+    get = Body <$> get <*> get
+
+-- | Maybe entry.
+type Entry a = Maybe (Body a)
+
+-- | Entry with additional arguemnts.
+entryWith :: a -> [Int] -> Entry a
+entryWith v xs = Just (Body xs v)
+
+-- | Plain entry with no additional arugments.
+entry :: [Int] -> Entry ()
+entry = entryWith ()
 
 -- | Configuration of the schema.  All configuration elements specify the
 -- range over which a particular observation type should be taken on account.
@@ -166,62 +254,98 @@ searchS dict sent = \ks -> do
 -- type will be extracted with respect to previous (@k - 1@), current (@k@)
 -- and after the next (@k + 2@) positions when identifying the observation
 -- set for position @k@ in the input sentence.
-data SchemaCfg = SchemaCfg
-    { orthC         :: [Int]    -- ^ The 'orthS' schema block
-    , lemmaC        :: [Int]    -- ^ The 'lemmaS' schema block
-    , shapeC        :: [Int]    -- ^ The 'shapeS' schema block
-    , shapePairC    :: [Int]    -- ^ The 'shapePairS' schema block
-    , suffixC       :: [Int]    -- ^ The 'suffixS' schema block
-    , dictC     :: Maybe (Dict.NeDict, [Int]) -- ^ The 'searchS' schema block
-    }
+data SchemaConf = SchemaConf {
+    -- | The 'orthB' schema block.
+      orthC             :: Entry ()
+    -- | The 'splitOrthB' schema block.
+    , splitOrthC        :: Entry ()
+    -- | The 'lowPrefixesB' schema block.  The first list of ints
+    -- represents lengths of prefixes.
+    , lowPrefixesC      :: Entry [Int]
+    -- | The 'lowSuffixesB' schema block.  The first list of ints
+    -- represents lengths of suffixes.
+    , lowSuffixesC      :: Entry [Int]
+    -- | The 'lemmaB' schema block.
+    , lemmaC            :: Entry Int
+    -- | The 'shapeB' schema block.
+    , shapeC            :: Entry ()
+    -- | The 'packedB' schema block.
+    , packedC           :: Entry ()
+    -- | The 'shapePairB' schema block.
+    , shapePairC        :: Entry ()
+    -- | The 'packedPairB' schema block.
+    , packedPairC       :: Entry ()
+    -- | The 'searchB' schema block.
+    , searchC           :: Entry Dict.NeDict
+    } deriving (Show)
 
-instance Binary SchemaCfg where
-    put SchemaCfg{..} = do
+instance Binary SchemaConf where
+    put SchemaConf{..} = do
         put orthC
+        put splitOrthC
+        put lowPrefixesC
+        put lowSuffixesC
         put lemmaC
         put shapeC
+        put packedC
         put shapePairC
-        put suffixC
-        put dictC
-    get = SchemaCfg
-        <$> get
-        <*> get
-        <*> get
-        <*> get
-        <*> get
-        <*> get
+        put packedPairC
+        put searchC
+    get = SchemaConf
+        <$> get <*> get <*> get <*> get
+        <*> get <*> get <*> get <*> get
+        <*> get <*> get
 
--- | Default configuration for Nerf observation schema.
-defaultCfg
+-- | Null configuration of the observation schema.
+nullConf :: SchemaConf
+nullConf = SchemaConf
+    Nothing Nothing Nothing Nothing
+    Nothing Nothing Nothing Nothing
+    Nothing Nothing
+
+-- | Default configuration of the observation schema.
+defaultConf
     :: FilePath     -- ^ Path to 'Dict.NeDict' in a binary form
-    -> IO SchemaCfg
-defaultCfg nePath = do
+    -> IO SchemaConf
+defaultConf nePath = do
     neDict <- decodeFile nePath
-    return $ SchemaCfg
-        { orthC         = [-1, 0]
-        , lemmaC        = [-1, 0]
-        , shapeC        = [-1, 0]
-        , shapePairC    = [0]
-        , suffixC       = [0]
-        , dictC         = Just (neDict, [-1, 0]) }
+    return $ SchemaConf
+        { orthC         = Nothing
+        , splitOrthC    = entry                 [-1, 0]
+        , lowPrefixesC  = Nothing
+        , lowSuffixesC  = entryWith [2, 3, 4]   [0]
+        , lemmaC        = entryWith 3           [-1, 0]
+        , shapeC        = entry                 [-1, 0]
+        , packedC       = entry                 [-1, 0]
+        , shapePairC    = entry                 [0]
+        , packedPairC   = entry                 [0]
+        , searchC       = entryWith neDict      [-1, 0] }
 
-mkBasicS :: Block () -> [Int] -> Schema ()
-mkBasicS _   [] = void ()
-mkBasicS blk xs = fromBlock blk xs
+mkArg0 :: Block () -> Entry () -> Schema ()
+mkArg0 blk (Just x) = fromBlock blk (range x)
+mkArg0 _   Nothing  = void ()
 
-mkDictS :: Maybe (Dict.NeDict, [Int]) -> Schema ()
-mkDictS (Just (d, xs))  = fromBlock (searchS d) xs
-mkDictS Nothing         = void ()
+mkArg1 :: (a -> Block ()) -> Entry a -> Schema ()
+mkArg1 blk (Just x) = fromBlock (blk (args x)) (range x)
+mkArg1 _   Nothing  = void ()
+
+-- mkDictS :: Maybe (Dict.NeDict, [Int]) -> Schema ()
+-- mkDictS (Just (d, xs))  = fromBlock (searchB d) xs
+-- mkDictS Nothing         = void ()
 
 -- | Build the schema based on the configuration.
-fromCfg :: SchemaCfg -> Schema ()
-fromCfg SchemaCfg{..} = sequenceS_
-    [ mkBasicS orthS orthC
-    , mkBasicS lemmaS lemmaC
-    , mkBasicS shapeS shapeC
-    , mkBasicS shapePairS shapePairC
-    , mkBasicS suffixS suffixC
-    , mkDictS dictC ]
+fromConf :: SchemaConf -> Schema ()
+fromConf SchemaConf{..} = sequenceS_
+    [ mkArg0 orthB orthC
+    , mkArg0 splitOrthB orthC
+    , mkArg1 lowPrefixesB lowPrefixesC
+    , mkArg1 lowSuffixesB lowSuffixesC
+    , mkArg1 lemmaB lemmaC
+    , mkArg0 shapeB shapeC
+    , mkArg0 packedB packedC
+    , mkArg0 shapePairB shapePairC
+    , mkArg0 packedPairB packedPairC
+    , mkArg1 searchB searchC ]
 
 -- | Use the schema to extract observations from the sentence.
 schematize :: Schema a -> [Word] -> CRF.Sent Ob

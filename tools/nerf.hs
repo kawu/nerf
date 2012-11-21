@@ -14,7 +14,7 @@ import qualified Data.Text.Lazy as L
 import qualified Data.Text.Lazy.IO as L
 
 import NLP.Nerf (train, ner, tryOx)
-import NLP.Nerf.Schema (defaultCfg)
+import NLP.Nerf.Schema (defaultConf)
 import NLP.Nerf.Dict (preparePNEG, prepareNELexicon)
 
 data Args
@@ -87,7 +87,7 @@ main = exec =<< cmdArgsRun argModes
 exec :: Args -> IO ()
 
 exec TrainMode{..} = do
-    cfg  <- defaultCfg neDictPath
+    cfg  <- defaultConf neDictPath
     nerf <- train sgdArgs cfg trainPath evalPath
     when (not . null $ outNerf) $ do
         putStrLn $ "\nSaving model in " ++ outNerf ++ "..."
@@ -108,7 +108,7 @@ exec NerMode{..} = do
         L.putStrLn (showForest forest)
 
 exec OxMode{..} = do
-    cfg  <- defaultCfg neDictPath
+    cfg  <- defaultConf neDictPath
     tryOx cfg dataPath
 
 exec PnegMode{..} = preparePNEG lmfPath outPath
