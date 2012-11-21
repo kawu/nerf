@@ -47,9 +47,9 @@ import Data.Maybe (maybeToList)
 import Data.Binary (Binary, put, get, decodeFile)
 import qualified Data.Char as C
 import qualified Data.Set as S
-import qualified Data.Map as M
 import qualified Data.Vector as V
 import qualified Data.Text as T
+import qualified Data.DAWG as D
 
 import qualified Data.CRF.Chain1 as CRF
 import qualified Control.Monad.Ox as Ox
@@ -223,7 +223,7 @@ searchB dict sent = \ks -> do
   where
     BaseOb{..}      = mkBaseOb sent
     searchDict i    = join . maybeToList $
-        S.toList <$> (orth i >>= flip M.lookup dict)
+        S.toList <$> (orth i >>= flip D.lookup dict . T.unpack)
 
 -- | Body of configuration entry.
 data Body a = Body {
