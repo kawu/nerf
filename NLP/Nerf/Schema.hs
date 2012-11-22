@@ -5,18 +5,18 @@
 
 module NLP.Nerf.Schema
 ( 
--- * Schema
-  Ox
+-- * Types
+  Label
+, Dict
+, Ox
 , Schema
 , void
 , sequenceS_
 
--- * Using the schema
+-- * Schema
 , schematize
 
--- * Building schema
-
--- ** From config
+-- ** Configuration
 , Body (..)
 , Entry
 , entry
@@ -38,7 +38,7 @@ module NLP.Nerf.Schema
 , packedB
 , shapePairB
 , packedPairB
-, searchB
+, dictB
 ) where
 
 import Control.Applicative ((<$>), (<*>))
@@ -64,6 +64,10 @@ type Ox a = Ox.Ox Word T.Text a
 -- | A schema is a block of the Ox computation performed within the
 -- context of the sentence and the absolute sentence position.
 type Schema a = V.Vector Word -> Int -> Ox a
+
+-- | Label and dictionary of labels.
+type Label = T.Text
+type Dict  = Dict.Dict Label
 
 -- | A dummy schema block.
 void :: a -> Schema a
@@ -203,8 +207,8 @@ packedPairB sent = \ks ->
 
 -- | Plain dictionary search determined with respect to the list of
 -- relative positions.
-searchB :: Dict.NeDict -> Block ()
-searchB dict sent = \ks -> do
+dictB :: Dict -> Block ()
+dictB dict sent = \ks -> do
     mapM_ (Ox.saves . searchDict) ks
   where
     BaseOb{..}      = mkBaseOb sent
@@ -229,6 +233,11 @@ type Entry a = Maybe (Body a)
 -- | Entry with additional arguemnts.
 entryWith :: a -> [Int] -> Entry a
 entryWith v xs = Just (Body xs v)
+
+-- | Maybe entry with additional arguemnts.
+entryWith'Mb :: Maybe a -> [Int] -> Entry a
+entryWith'Mb (Just v) xs = Just (Body xs v)
+entryWith'Mb Nothing _   = Nothing
 
 -- | Plain entry with no additional arugments.
 entry :: [Int] -> Entry ()
@@ -261,8 +270,12 @@ data SchemaConf = SchemaConf {
     , shapePairC        :: Entry ()
     -- | The 'packedPairB' schema block.
     , packedPairC       :: Entry ()
-    -- | The 'searchB' schema block.
-    , searchC           :: Entry [Dict.NeDict]
+    -- | Dictionaries of NEs ('dictB' schema block).
+    , dictC             :: Entry [Dict]
+    -- | Dictionary of internal triggers.
+    , intTrigsC         :: Entry Dict
+    -- | Dictionary of external triggers.
+    , extTrigsC         :: Entry Dict
     } deriving (Show)
 
 instance Binary SchemaConf where
@@ -276,25 +289,35 @@ instance Binary SchemaConf where
         put packedC
         put shapePairC
         put packedPairC
-        put searchC
+        put dictC
+        put intTrigsC
+        put extTrigsC
     get = SchemaConf
         <$> get <*> get <*> get <*> get
         <*> get <*> get <*> get <*> get
-        <*> get <*> get
+        <*> get <*> get <*> get <*> get
 
 -- | Null configuration of the observation schema.
 nullConf :: SchemaConf
 nullConf = SchemaConf
     Nothing Nothing Nothing Nothing
     Nothing Nothing Nothing Nothing
-    Nothing Nothing
+    Nothing Nothing Nothing Nothing
 
 -- | Default configuration of the observation schema.
 defaultConf
-    :: [FilePath]     -- ^ Path to 'Dict.NeDict's in binary forms
+    :: [FilePath]       -- ^ Path to NE 'Dict's in binary forms
+    -> Maybe FilePath   -- ^ Maybe path to file with internal triggers
+    -> Maybe FilePath   -- ^ Maybe path to file with external triggers
     -> IO SchemaConf
-defaultConf nePaths = do
+defaultConf nePaths intPath extPath = do
     neDicts <- mapM decodeFile nePaths
+    intDict <- case intPath of 
+        Just path -> Just <$> decodeFile path
+        Nothing   -> return Nothing
+    extDict <- case extPath of 
+        Just path -> Just <$> decodeFile path
+        Nothing   -> return Nothing
     return $ SchemaConf
         { orthC         = Nothing
         , splitOrthC    = entry                 [-1, 0]
@@ -305,7 +328,9 @@ defaultConf nePaths = do
         , packedC       = entry                 [-1, 0]
         , shapePairC    = entry                 [0]
         , packedPairC   = entry                 [0]
-        , searchC       = entryWith neDicts     [-1, 0] }
+        , dictC         = entryWith neDicts     [-1, 0]
+        , intTrigsC     = entryWith'Mb intDict  [0]
+        , extTrigsC     = entryWith'Mb extDict  [-1] }
 
 mkArg0 :: Block () -> Entry () -> Schema ()
 mkArg0 blk (Just x) = fromBlock blk (range x)
@@ -335,7 +360,9 @@ fromConf SchemaConf{..} = sequenceS_
     , mkArg0 packedB packedC
     , mkArg0 shapePairB shapePairC
     , mkArg0 packedPairB packedPairC
-    , mkArgs1 searchB searchC ]
+    , mkArgs1 dictB dictC
+    , mkArg1 dictB intTrigsC
+    , mkArg1 dictB extTrigsC ]
 
 -- | Use the schema to extract observations from the sentence.
 schematize :: Schema a -> [Word] -> CRF.Sent Ob

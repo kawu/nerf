@@ -11,7 +11,7 @@ import qualified Data.Text.Lazy.IO as L
 
 import NLP.Nerf.Dict.Base
 
--- | Parse dictinoary into a list of entries.
+-- | Parse dictionary into a list of entries.
 parseProlexbase :: L.Text -> [Entry]
 parseProlexbase = map parseLine . L.lines
 

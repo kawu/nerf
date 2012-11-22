@@ -17,12 +17,14 @@ import NLP.Nerf (train, ner, tryOx)
 import NLP.Nerf.Schema (defaultConf)
 import NLP.Nerf.Dict
     ( preparePoliMorf, preparePNEG, prepareNELexicon
-    , prepareProlexbase )
+    , prepareProlexbase, preparePNET )
 
 data Args
   = TrainMode
     { trainPath     :: FilePath
     , dictsPath     :: [FilePath]
+    , intTrigsPath  :: Maybe FilePath
+    , extTrigsPath  :: Maybe FilePath
     , evalPath      :: Maybe FilePath
     , iterNum       :: Double
     , batchSize     :: Int
@@ -35,7 +37,9 @@ data Args
     , inNerf        :: FilePath }
   | OxMode
     { dataPath      :: FilePath
-    , dictsPath     :: [FilePath] }
+    , dictsPath     :: [FilePath]
+    , intTrigsPath  :: Maybe FilePath
+    , extTrigsPath  :: Maybe FilePath }
   | PoliMode
     { poliPath      :: FilePath
     , outPath       :: FilePath }
@@ -45,6 +49,10 @@ data Args
   | ProlexMode
     { prolexPath    :: FilePath
     , outPath       :: FilePath }
+  | PnetMode
+    { pnetPath      :: FilePath
+    , intPath       :: FilePath
+    , extPath       :: FilePath }
   | NeLexMode
     { nePath        :: FilePath
     , outPath       :: FilePath }
@@ -54,6 +62,8 @@ trainMode :: Args
 trainMode = TrainMode
     { trainPath = def &= argPos 0 &= typ "TRAIN-FILE"
     , dictsPath = def &= help "Named Entity dictionaries"
+    , intTrigsPath = def &= help "Dictionary of internal triggers"
+    , extTrigsPath = def &= help "Dictionary of external triggers"
     , evalPath = def &= typFile &= help "Evaluation file"
     , iterNum = 10 &= help "Number of SGD iterations"
     , batchSize = 30 &= help "Batch size"
@@ -70,7 +80,9 @@ nerMode = NerMode
 oxMode :: Args
 oxMode = OxMode
     { dataPath = def &= argPos 0 &= typ "DATA-FILE"
-    , dictsPath = def &= help "Named Entity dictionaries" }
+    , dictsPath = def &= help "Named Entity dictionaries"
+    , intTrigsPath = def &= help "Dictionary of internal triggers"
+    , extTrigsPath = def &= help "Dictionary of external triggers" }
 
 poliMode :: Args
 poliMode = PoliMode
@@ -87,6 +99,12 @@ prolexMode = ProlexMode
     { prolexPath = def &= typ "Prolexbase" &= argPos 0
     , outPath = def &= typ "Output" &= argPos 1 }
 
+pnetMode :: Args
+pnetMode = PnetMode
+    { pnetPath = def &= typ "PNET" &= argPos 0
+    , intPath = def &= typ "Output internal triggers" &= argPos 1
+    , extPath = def &= typ "Output external triggers" &= argPos 2 }
+
 neLexMode :: Args
 neLexMode = NeLexMode
     { nePath = def &= typ "NELexicon" &= argPos 0
@@ -95,7 +113,7 @@ neLexMode = NeLexMode
 argModes :: Mode (CmdArgs Args)
 argModes = cmdArgsMode $ modes
     [ trainMode, nerMode, oxMode, poliMode
-    , pnegMode, prolexMode, neLexMode ]
+    , pnegMode, prolexMode, pnetMode, neLexMode ]
 
 main :: IO ()
 main = exec =<< cmdArgsRun argModes
@@ -103,7 +121,7 @@ main = exec =<< cmdArgsRun argModes
 exec :: Args -> IO ()
 
 exec TrainMode{..} = do
-    cfg  <- defaultConf dictsPath
+    cfg  <- defaultConf dictsPath intTrigsPath extTrigsPath
     nerf <- train sgdArgs cfg trainPath evalPath
     when (not . null $ outNerf) $ do
         putStrLn $ "\nSaving model in " ++ outNerf ++ "..."
@@ -124,12 +142,13 @@ exec NerMode{..} = do
         L.putStrLn (showForest forest)
 
 exec OxMode{..} = do
-    cfg  <- defaultConf dictsPath
+    cfg  <- defaultConf dictsPath intTrigsPath extTrigsPath
     tryOx cfg dataPath
 
 exec PoliMode{..} = preparePoliMorf poliPath outPath
 exec PnegMode{..} = preparePNEG lmfPath outPath
 exec ProlexMode{..} = prepareProlexbase prolexPath outPath
+exec PnetMode{..} = preparePNET pnetPath intPath extPath
 exec NeLexMode{..} = prepareNELexicon nePath outPath
 
 parseRaw :: L.Text -> [[T.Text]]

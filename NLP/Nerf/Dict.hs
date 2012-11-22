@@ -5,6 +5,7 @@ module NLP.Nerf.Dict
 , preparePNEG
 , prepareNELexicon
 , prepareProlexbase
+, preparePNET
 , module NLP.Nerf.Dict.Base
 ) where
 
@@ -15,6 +16,7 @@ import NLP.Nerf.Dict.Base
 import NLP.Nerf.Dict.PNEG (readPNEG)
 import NLP.Nerf.Dict.NELexicon (readNELexicon)
 import NLP.Nerf.Dict.Prolexbase (readProlexbase)
+import qualified NLP.Nerf.Dict.PNET as PNET
 
 -- | Is it a single word entry?
 atomic :: Entry -> Bool
@@ -46,7 +48,7 @@ prepareNELexicon nePath outPath = do
 -- | Parse PoliMorf and extract form/label pairs to construct
 -- the dictionary of NEs.
 preparePoliMorf
-    :: FilePath     -- ^ File to PoliMorf
+    :: FilePath     -- ^ Path to PoliMorf
     -> FilePath     -- ^ Output file
     -> IO ()
 preparePoliMorf poliPath outPath = do
@@ -60,9 +62,27 @@ preparePoliMorf poliPath outPath = do
 -- | Parse Prolexbase and extract form/label pairs to construct
 -- the dictionary.
 prepareProlexbase
-    :: FilePath     -- ^ File to Prolexbase
+    :: FilePath     -- ^ Path to Prolexbase
     -> FilePath     -- ^ Output file
     -> IO ()
 prepareProlexbase proPath outPath = do
     neDict <- fromEntries . filter atomic <$> readProlexbase proPath
     saveDict outPath neDict
+
+-- | Parse PNET dictionary and save triggers in binary format.
+preparePNET
+    :: FilePath     -- ^ Path to PNET
+    -> FilePath     -- ^ Internal triggers output file
+    -> FilePath     -- ^ External triggers output file
+    -> IO ()
+preparePNET pnetPath intPath extPath = do
+    intDict <- mkDict PNET.Internal <$> PNET.readPNET pnetPath
+    saveDict intPath intDict
+    extDict <- mkDict PNET.External <$> PNET.readPNET pnetPath
+    saveDict extPath extDict
+  where
+    mkDict typ
+        = fromPairs
+        . filter (not . isMultiWord . fst) 
+        . map ((,) <$> PNET.orth <*> PNET.neTyp)
+        . filter (PNET.withTyp typ)
