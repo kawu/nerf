@@ -15,7 +15,9 @@ import qualified Data.Text.Lazy.IO as L
 
 import NLP.Nerf (train, ner, tryOx)
 import NLP.Nerf.Schema (defaultConf)
-import NLP.Nerf.Dict (preparePoliMorf, preparePNEG, prepareNELexicon)
+import NLP.Nerf.Dict
+    ( preparePoliMorf, preparePNEG, prepareNELexicon
+    , prepareProlexbase )
 
 data Args
   = TrainMode
@@ -39,6 +41,9 @@ data Args
     , outPath       :: FilePath }
   | PnegMode
     { lmfPath       :: FilePath
+    , outPath       :: FilePath }
+  | ProlexMode
+    { prolexPath    :: FilePath
     , outPath       :: FilePath }
   | NeLexMode
     { nePath        :: FilePath
@@ -77,14 +82,20 @@ pnegMode = PnegMode
     { lmfPath = def &= typ "PNEG" &= argPos 0
     , outPath = def &= typ "Output" &= argPos 1 }
 
+prolexMode :: Args
+prolexMode = ProlexMode
+    { prolexPath = def &= typ "Prolexbase" &= argPos 0
+    , outPath = def &= typ "Output" &= argPos 1 }
+
 neLexMode :: Args
 neLexMode = NeLexMode
     { nePath = def &= typ "NELexicon" &= argPos 0
     , outPath = def &= typ "Output" &= argPos 1 }
 
 argModes :: Mode (CmdArgs Args)
-argModes = cmdArgsMode $
-    modes [trainMode, nerMode, oxMode, poliMode, pnegMode, neLexMode]
+argModes = cmdArgsMode $ modes
+    [ trainMode, nerMode, oxMode, poliMode
+    , pnegMode, prolexMode, neLexMode ]
 
 main :: IO ()
 main = exec =<< cmdArgsRun argModes
@@ -118,6 +129,7 @@ exec OxMode{..} = do
 
 exec PoliMode{..} = preparePoliMorf poliPath outPath
 exec PnegMode{..} = preparePNEG lmfPath outPath
+exec ProlexMode{..} = prepareProlexbase prolexPath outPath
 exec NeLexMode{..} = prepareNELexicon nePath outPath
 
 parseRaw :: L.Text -> [[T.Text]]

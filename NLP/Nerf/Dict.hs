@@ -4,6 +4,7 @@ module NLP.Nerf.Dict
 ( preparePoliMorf
 , preparePNEG
 , prepareNELexicon
+, prepareProlexbase
 , module NLP.Nerf.Dict.Base
 ) where
 
@@ -13,6 +14,7 @@ import qualified Data.PoliMorf as Poli
 import NLP.Nerf.Dict.Base
 import NLP.Nerf.Dict.PNEG (readPNEG)
 import NLP.Nerf.Dict.NELexicon (readNELexicon)
+import NLP.Nerf.Dict.Prolexbase (readProlexbase)
 
 -- | Is it a single word entry?
 atomic :: Entry -> Bool
@@ -28,8 +30,9 @@ preparePNEG lmfPath outPath = do
     neDict <- fromEntries . filter atomic <$> readPNEG lmfPath
     saveDict outPath neDict
 
--- | Parse NELexicon, merge it with the PoliMorf and serialize
--- into a binary, DAWG form.
+-- -- | Parse NELexicon, merge it with the PoliMorf and serialize
+-- -- into a binary, DAWG form.
+-- | Parse NELexicon dictionary and save it in a binary form.
 prepareNELexicon
     :: FilePath     -- ^ Path to NELexicon
     -> FilePath     -- ^ Output file
@@ -41,7 +44,7 @@ prepareNELexicon nePath outPath = do
     -- encodeFile outPath (Poli.merge baseMap neDict)
 
 -- | Parse PoliMorf and extract form/label pairs to construct
--- the dictinoary of NEs.
+-- the dictionary of NEs.
 preparePoliMorf
     :: FilePath     -- ^ File to PoliMorf
     -> FilePath     -- ^ Output file
@@ -53,3 +56,13 @@ preparePoliMorf poliPath outPath = do
     saveDict outPath neDict
   where
     cond x = x /= "pospolita" && x /= ""
+
+-- | Parse Prolexbase and extract form/label pairs to construct
+-- the dictionary.
+prepareProlexbase
+    :: FilePath     -- ^ File to Prolexbase
+    -> FilePath     -- ^ Output file
+    -> IO ()
+prepareProlexbase proPath outPath = do
+    neDict <- fromEntries . filter atomic <$> readProlexbase proPath
+    saveDict outPath neDict

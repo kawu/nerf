@@ -50,6 +50,7 @@ library
       , NLP.Nerf.Dict.Base
       , NLP.Nerf.Dict.PNEG
       , NLP.Nerf.Dict.NELexicon
+      , NLP.Nerf.Dict.Prolexbase
 
     ghc-options: -Wall -O2
 
