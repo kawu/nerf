@@ -6,7 +6,7 @@ module NLP.Nerf.Dict.PNET
 ( parsePNET
 , readPNET
 , Typ (..)
-, withTyp
+, hasTyp
 , Entry (..)
 ) where
 
@@ -34,8 +34,9 @@ data Entry = Entry
     , neTyp     :: T.Text
     , example   :: T.Text }
 
-withTyp :: Typ -> Entry -> Bool
-withTyp x = (==x) . typ
+-- | Does entry represents a trigger of the given type?
+hasTyp :: Typ -> Entry -> Bool
+hasTyp x = (==x) . typ
 
 parseLine :: L.Text -> Entry
 parseLine line = case map L.toStrict (L.split (=='\t') line) of

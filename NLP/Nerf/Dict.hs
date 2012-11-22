@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Extraction utilities for various dictionary resources.
+
 module NLP.Nerf.Dict
 ( extractPoliMorf
 , extractPNEG
@@ -74,4 +76,4 @@ mkTriggers typ
     = fromPairs
     . filter (not . isMultiWord . fst) 
     . map ((,) <$> PNET.orth <*> PNET.neTyp)
-    . filter (PNET.withTyp typ)
+    . filter (PNET.hasTyp typ)
