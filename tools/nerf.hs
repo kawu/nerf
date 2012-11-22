@@ -4,6 +4,9 @@
 {-# LANGUAGE RecordWildCards #-}
 
 import System.Console.CmdArgs
+import System.IO
+    ( Handle, hGetBuffering, hSetBuffering
+    , stdout, BufferMode (..) )
 import Control.Applicative ((<$>), (<*>))
 import Control.Monad (forM_, when)
 import Data.Maybe (catMaybes)
@@ -14,6 +17,7 @@ import qualified Numeric.SGD as SGD
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as L
 import qualified Data.Text.Lazy.IO as L
+import qualified Data.DAWG as D
 
 import NLP.Nerf (train, ner, tryOx)
 import NLP.Nerf.Schema (defaultConf)
@@ -90,19 +94,31 @@ data Resources = Resources
     , extDict       :: Maybe Dict }
 
 extract :: Nerf -> IO Resources
-extract nerf = Resources
-    <$> inject extractPoliMorf (poliMorf nerf)
-    <*> inject extractProlexbase (prolex nerf)
-    <*> inject extractPNEG (pneg nerf)
-    <*> inject extractNELexicon (neLex nerf)
-    <*> inject extractIntTriggers (pnet nerf)
-    <*> inject extractExtTriggers (pnet nerf)
+extract nerf = withBuffering stdout NoBuffering $ Resources
+    <$> extractDict "PoliMorf" extractPoliMorf (poliMorf nerf)
+    <*> extractDict "Prolexbase" extractProlexbase (prolex nerf)
+    <*> extractDict "PNEG" extractPNEG (pneg nerf)
+    <*> extractDict "NELexicon" extractNELexicon (neLex nerf)
+    <*> extractDict "internal triggers" extractIntTriggers (pnet nerf)
+    <*> extractDict "external triggers" extractExtTriggers (pnet nerf)
 
-inject :: (a -> IO b) -> Maybe a -> IO (Maybe b)
-inject f (Just x) = do
-    y <- f x
-    return (Just y)
-inject _ Nothing = return Nothing
+withBuffering :: Handle -> BufferMode -> IO a -> IO a
+withBuffering h mode io = do
+    oldMode <- hGetBuffering h
+    hSetBuffering h mode
+    x <- io
+    hSetBuffering h oldMode
+    return x
+
+extractDict :: String -> (a -> IO Dict) -> Maybe a -> IO (Maybe Dict)
+extractDict msg f (Just x) = do
+    putStr $ "Reading " ++ msg ++ "..."
+    dict <- f x
+    let k = D.numStates dict
+    k `seq` putStrLn $ " Done"
+    putStrLn $ "Number of automata states = " ++ show k
+    return (Just dict)
+extractDict _ _ Nothing = return Nothing
 
 main :: IO ()
 main = exec =<< cmdArgsRun argModes
