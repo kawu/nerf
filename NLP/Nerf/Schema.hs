@@ -6,14 +6,12 @@
 module NLP.Nerf.Schema
 ( 
 -- * Types
-  Label
-, Dict
-, Ox
+  Ox
 , Schema
 , void
 , sequenceS_
 
--- * Schema
+-- * Usage
 , schematize
 
 -- ** Configuration
@@ -44,7 +42,7 @@ module NLP.Nerf.Schema
 import Control.Applicative ((<$>), (<*>))
 import Control.Monad (forM_, join)
 import Data.Maybe (maybeToList)
-import Data.Binary (Binary, put, get, decodeFile)
+import Data.Binary (Binary, put, get)
 import qualified Data.Char as C
 import qualified Data.Set as S
 import qualified Data.Vector as V
@@ -56,7 +54,7 @@ import qualified Control.Monad.Ox as Ox
 import qualified Control.Monad.Ox.Text as Ox
 
 import NLP.Nerf.Types
-import qualified NLP.Nerf.Dict as Dict
+import NLP.Nerf.Dict (Dict)
 
 -- | The Ox monad specialized to word token type and text observations.
 type Ox a = Ox.Ox Word T.Text a
@@ -64,10 +62,6 @@ type Ox a = Ox.Ox Word T.Text a
 -- | A schema is a block of the Ox computation performed within the
 -- context of the sentence and the absolute sentence position.
 type Schema a = V.Vector Word -> Int -> Ox a
-
--- | Label and dictionary of labels.
-type Label = T.Text
-type Dict  = Dict.Dict Label
 
 -- | A dummy schema block.
 void :: a -> Schema a
@@ -306,18 +300,11 @@ nullConf = SchemaConf
 
 -- | Default configuration of the observation schema.
 defaultConf
-    :: [FilePath]       -- ^ Path to NE 'Dict's in binary forms
-    -> Maybe FilePath   -- ^ Maybe path to file with internal triggers
-    -> Maybe FilePath   -- ^ Maybe path to file with external triggers
+    :: [Dict]       -- ^ Named Entity dictionaries
+    -> Maybe Dict   -- ^ Dictionary of internal triggers
+    -> Maybe Dict   -- ^ Dictionary of external triggers
     -> IO SchemaConf
-defaultConf nePaths intPath extPath = do
-    neDicts <- mapM decodeFile nePaths
-    intDict <- case intPath of 
-        Just path -> Just <$> decodeFile path
-        Nothing   -> return Nothing
-    extDict <- case extPath of 
-        Just path -> Just <$> decodeFile path
-        Nothing   -> return Nothing
+defaultConf neDicts intDict extDict = do
     return $ SchemaConf
         { orthC         = Nothing
         , splitOrthC    = entry                 [-1, 0]

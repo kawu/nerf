@@ -11,6 +11,7 @@ module NLP.Nerf.Dict.Base
 , Entry (..)
 
 -- * Dictionary
+, Label
 , Dict
 , fromPairs
 , fromEntries
@@ -24,7 +25,7 @@ module NLP.Nerf.Dict.Base
 ) where
 
 import Control.Applicative ((<$>), (<*>))
-import Data.Binary (Binary, encodeFile, decodeFile)
+import Data.Binary (encodeFile, decodeFile)
 import Data.Text.Binary ()
 import qualified Data.Text as T
 import qualified Data.Set as S
@@ -46,36 +47,39 @@ data Entry = Entry
     , neType :: !NeType -- ^ Type of the NE
     } deriving (Show, Read, Eq, Ord)
 
+-- | Dictionary label.
+type Label = T.Text
+
 -- | A 'Dict' is a map from forms to labels.  Each form may be annotated
 -- with multiple labels.  The map is represented using the directed acyclic
 -- word graph.
-type Dict a = D.DAWG (S.Set a)
+type Dict = D.DAWG (S.Set Label)
 
--- | Construct dictionary from the list of form/neType pairs.
-fromPairs :: Ord a => [(Form, a)] -> Dict a
+-- | Construct dictionary from the list of form/label pairs.
+fromPairs :: [(Form, Label)] -> Dict
 fromPairs xs = D.fromListWith S.union
     [ ( T.unpack x
       , S.singleton y)
     | (x, y) <- xs ]
 
 -- | Construct dictionary from the list of entries.
-fromEntries :: [Entry] -> Dict NeType
+fromEntries :: [Entry] -> Dict
 fromEntries = fromPairs . map ((,) <$> neOrth <*> neType)
 
 -- | Remove dictionary entries which do not satisfy the predicate.
-siftDict :: Ord a => (Form -> S.Set a -> Bool) -> Dict a -> Dict a
+siftDict :: (Form -> S.Set Label -> Bool) -> Dict -> Dict
 siftDict f dict = D.fromList [(k, v) | (k, v) <- D.assocs dict, f (T.pack k) v]
 
 -- | Save the dictionary in the file.
-saveDict :: (Ord a, Binary a) => FilePath -> Dict a -> IO ()
+saveDict :: FilePath -> Dict -> IO ()
 saveDict = encodeFile
 
 -- | Load the dictionary from the file.
-loadDict :: (Ord a, Binary a) => FilePath -> IO (Dict a) 
+loadDict :: FilePath -> IO Dict
 loadDict = decodeFile
 
 -- | Merge dictionary resources.
-merge :: Ord a => [Dict a] -> Dict a
+merge :: [Dict] -> Dict
 merge = unionsWith S.union
 
 -- | Replacement implementation of unionsWith while there is
@@ -90,9 +94,9 @@ unionWith f d d' = D.fromListWith f (D.assocs d ++ D.assocs d')
 
 -- | Differentiate labels from separate dictionaries using
 -- dictionary-unique prefixes.
-diff :: Ord a => [Dict a] -> [Dict (a, Int)]
+diff :: [Dict] -> [Dict]
 diff ds =
-    [ mapS (,i) `mapD` dict
+    [ mapS (addPrefix i) `mapD` dict
     | (i, dict) <- zip [0..] ds ]
 
 -- | Map function over the DAWG elements.
@@ -102,3 +106,7 @@ mapD f d = D.fromList [(x, f y) | (x, y) <- D.assocs d]
 -- | Map function over the set.
 mapS :: Ord b => (a -> b) -> S.Set a -> S.Set b
 mapS f s = S.fromList [f x | x <- S.toList s]
+
+-- | Add integer prefix.
+addPrefix :: Int -> T.Text -> T.Text
+addPrefix = T.append . T.pack . show

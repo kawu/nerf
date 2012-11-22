@@ -1,11 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module NLP.Nerf.Dict
-( preparePoliMorf
-, preparePNEG
-, prepareNELexicon
-, prepareProlexbase
-, preparePNET
+( extractPoliMorf
+, extractPNEG
+, extractNELexicon
+, extractProlexbase
+, extractIntTriggers
+, extractExtTriggers
 , module NLP.Nerf.Dict.Base
 ) where
 
@@ -22,67 +23,55 @@ import qualified NLP.Nerf.Dict.PNET as PNET
 atomic :: Entry -> Bool
 atomic = not . isMultiWord . neOrth
 
--- | Parse PNEG dictionary and save it in a binary form into
--- the output file.
-preparePNEG
+-- | Extract NEs dictionary from PNEG.
+extractPNEG
     :: FilePath     -- ^ Path to PNEG in the LMF format
-    -> FilePath     -- ^ Output file
-    -> IO ()
-preparePNEG lmfPath outPath = do
-    neDict <- fromEntries . filter atomic <$> readPNEG lmfPath
-    saveDict outPath neDict
+    -> IO Dict
+extractPNEG lmfPath =
+    fromEntries . filter atomic <$> readPNEG lmfPath
 
--- -- | Parse NELexicon, merge it with the PoliMorf and serialize
--- -- into a binary, DAWG form.
--- | Parse NELexicon dictionary and save it in a binary form.
-prepareNELexicon
+-- | Extract NEs dictionary from NELexicon.
+extractNELexicon
     :: FilePath     -- ^ Path to NELexicon
-    -> FilePath     -- ^ Output file
-    -> IO ()
-prepareNELexicon nePath outPath = do
-    neDict <- fromEntries . filter atomic <$> readNELexicon nePath
-    saveDict outPath neDict
-    -- baseMap <- Poli.mkBaseMap <$> Poli.readPoliMorf poliPath
-    -- encodeFile outPath (Poli.merge baseMap neDict)
+    -> IO Dict
+extractNELexicon nePath =
+    fromEntries . filter atomic <$> readNELexicon nePath
 
--- | Parse PoliMorf and extract form/label pairs to construct
--- the dictionary of NEs.
-preparePoliMorf
+-- | Extract NEs dictionary from PoliMorf.
+extractPoliMorf
     :: FilePath     -- ^ Path to PoliMorf
-    -> FilePath     -- ^ Output file
-    -> IO ()
-preparePoliMorf poliPath outPath = do
-    neDict <- fromPairs . filter (cond . snd)
-            . map ((,) <$> Poli.form <*> Poli.cat)
-          <$> Poli.readPoliMorf poliPath
-    saveDict outPath neDict
+    -> IO Dict
+extractPoliMorf poliPath
+    = fromPairs . filter (cond . snd)
+    . map ((,) <$> Poli.form <*> Poli.cat)
+    <$> Poli.readPoliMorf poliPath
   where
     cond x = x /= "pospolita" && x /= ""
 
--- | Parse Prolexbase and extract form/label pairs to construct
--- the dictionary.
-prepareProlexbase
+-- | Extract NEs dictionary from Prolexbase.
+extractProlexbase
     :: FilePath     -- ^ Path to Prolexbase
-    -> FilePath     -- ^ Output file
-    -> IO ()
-prepareProlexbase proPath outPath = do
-    neDict <- fromEntries . filter atomic <$> readProlexbase proPath
-    saveDict outPath neDict
+    -> IO Dict
+extractProlexbase proPath = do
+    fromEntries . filter atomic <$> readProlexbase proPath
 
--- | Parse PNET dictionary and save triggers in binary format.
-preparePNET
+-- | Extract internal triggers from PNET dictionary.
+extractIntTriggers
     :: FilePath     -- ^ Path to PNET
-    -> FilePath     -- ^ Internal triggers output file
-    -> FilePath     -- ^ External triggers output file
-    -> IO ()
-preparePNET pnetPath intPath extPath = do
-    intDict <- mkDict PNET.Internal <$> PNET.readPNET pnetPath
-    saveDict intPath intDict
-    extDict <- mkDict PNET.External <$> PNET.readPNET pnetPath
-    saveDict extPath extDict
-  where
-    mkDict typ
-        = fromPairs
-        . filter (not . isMultiWord . fst) 
-        . map ((,) <$> PNET.orth <*> PNET.neTyp)
-        . filter (PNET.withTyp typ)
+    -> IO Dict
+extractIntTriggers pnetPath =
+    mkTriggers PNET.Internal <$> PNET.readPNET pnetPath
+
+-- | Extract external triggers from PNET dictionary.
+extractExtTriggers
+    :: FilePath     -- ^ Path to PNET
+    -> IO Dict
+extractExtTriggers pnetPath =
+    mkTriggers PNET.External <$> PNET.readPNET pnetPath
+
+mkTriggers :: PNET.Typ -> [PNET.Entry] -> Dict
+mkTriggers typ
+    = fromPairs
+    . filter (not . isMultiWord . fst) 
+    . map ((,) <$> PNET.orth <*> PNET.neTyp)
+    . filter (PNET.withTyp typ)

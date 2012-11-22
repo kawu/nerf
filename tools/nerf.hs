@@ -3,8 +3,10 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
 
-import Control.Monad (forM_, when)
 import System.Console.CmdArgs
+import Control.Applicative ((<$>), (<*>))
+import Control.Monad (forM_, when)
+import Data.Maybe (catMaybes)
 import Data.Binary (encodeFile, decodeFile)
 import Data.Text.Binary ()
 import Text.Named.Enamex (showForest)
@@ -16,16 +18,18 @@ import qualified Data.Text.Lazy.IO as L
 import NLP.Nerf (train, ner, tryOx)
 import NLP.Nerf.Schema (defaultConf)
 import NLP.Nerf.Dict
-    ( preparePoliMorf, preparePNEG, prepareNELexicon
-    , prepareProlexbase, preparePNET )
+    ( extractPoliMorf, extractPNEG, extractNELexicon, extractProlexbase
+    , extractIntTriggers, extractExtTriggers, Dict )
 
 data Args
   = TrainMode
     { trainPath     :: FilePath
-    , dictsPath     :: [FilePath]
-    , intTrigsPath  :: Maybe FilePath
-    , extTrigsPath  :: Maybe FilePath
     , evalPath      :: Maybe FilePath
+    , poliMorfPath  :: Maybe FilePath
+    , prolexPath    :: Maybe FilePath
+    , pnegPath      :: Maybe FilePath
+    , neLexPath     :: Maybe FilePath
+    , pnetPath      :: Maybe FilePath
     , iterNum       :: Double
     , batchSize     :: Int
     , regVar        :: Double
@@ -37,34 +41,22 @@ data Args
     , inNerf        :: FilePath }
   | OxMode
     { dataPath      :: FilePath
-    , dictsPath     :: [FilePath]
-    , intTrigsPath  :: Maybe FilePath
-    , extTrigsPath  :: Maybe FilePath }
-  | PoliMode
-    { poliPath      :: FilePath
-    , outPath       :: FilePath }
-  | PnegMode
-    { lmfPath       :: FilePath
-    , outPath       :: FilePath }
-  | ProlexMode
-    { prolexPath    :: FilePath
-    , outPath       :: FilePath }
-  | PnetMode
-    { pnetPath      :: FilePath
-    , intPath       :: FilePath
-    , extPath       :: FilePath }
-  | NeLexMode
-    { nePath        :: FilePath
-    , outPath       :: FilePath }
+    , poliMorfPath  :: Maybe FilePath
+    , prolexPath    :: Maybe FilePath
+    , pnegPath      :: Maybe FilePath
+    , neLexPath     :: Maybe FilePath
+    , pnetPath      :: Maybe FilePath }
   deriving (Data, Typeable, Show)
 
 trainMode :: Args
 trainMode = TrainMode
     { trainPath = def &= argPos 0 &= typ "TRAIN-FILE"
-    , dictsPath = def &= help "Named Entity dictionaries"
-    , intTrigsPath = def &= help "Dictionary of internal triggers"
-    , extTrigsPath = def &= help "Dictionary of external triggers"
     , evalPath = def &= typFile &= help "Evaluation file"
+    , poliMorfPath = def &= typFile &= help "Path to PoliMorf"
+    , prolexPath = def &= typFile &= help "Path to Prolexbase"
+    , pnegPath = def &= typFile &= help "Path to PNEG-LMF"
+    , neLexPath = def &= typFile &= help "Path to NELexicon"
+    , pnetPath = def &= typFile &= help "Path to PNET"
     , iterNum = 10 &= help "Number of SGD iterations"
     , batchSize = 30 &= help "Batch size"
     , regVar = 10.0 &= help "Regularization variance"
@@ -80,48 +72,48 @@ nerMode = NerMode
 oxMode :: Args
 oxMode = OxMode
     { dataPath = def &= argPos 0 &= typ "DATA-FILE"
-    , dictsPath = def &= help "Named Entity dictionaries"
-    , intTrigsPath = def &= help "Dictionary of internal triggers"
-    , extTrigsPath = def &= help "Dictionary of external triggers" }
-
-poliMode :: Args
-poliMode = PoliMode
-    { poliPath = def &= typ "PoliMorf" &= argPos 0
-    , outPath = def &= typ "Output" &= argPos 1 }
-
-pnegMode :: Args
-pnegMode = PnegMode
-    { lmfPath = def &= typ "PNEG" &= argPos 0
-    , outPath = def &= typ "Output" &= argPos 1 }
-
-prolexMode :: Args
-prolexMode = ProlexMode
-    { prolexPath = def &= typ "Prolexbase" &= argPos 0
-    , outPath = def &= typ "Output" &= argPos 1 }
-
-pnetMode :: Args
-pnetMode = PnetMode
-    { pnetPath = def &= typ "PNET" &= argPos 0
-    , intPath = def &= typ "Output internal triggers" &= argPos 1
-    , extPath = def &= typ "Output external triggers" &= argPos 2 }
-
-neLexMode :: Args
-neLexMode = NeLexMode
-    { nePath = def &= typ "NELexicon" &= argPos 0
-    , outPath = def &= typ "Output" &= argPos 1 }
+    , poliMorfPath = def &= typFile &= help "Path to PoliMorf"
+    , prolexPath = def &= typFile &= help "Path to Prolexbase"
+    , pnegPath = def &= typFile &= help "Path to PNEG-LMF"
+    , neLexPath = def &= typFile &= help "Path to NELexicon"
+    , pnetPath = def &= typFile &= help "Path to PNET" }
 
 argModes :: Mode (CmdArgs Args)
-argModes = cmdArgsMode $ modes
-    [ trainMode, nerMode, oxMode, poliMode
-    , pnegMode, prolexMode, pnetMode, neLexMode ]
+argModes = cmdArgsMode $ modes [trainMode, nerMode, oxMode]
+
+data Resources = Resources
+    { poliDict      :: Maybe Dict
+    , prolexDict    :: Maybe Dict
+    , pnegDict      :: Maybe Dict
+    , neLexDict     :: Maybe Dict
+    , intDict       :: Maybe Dict
+    , extDict       :: Maybe Dict }
+
+extract :: Args -> IO Resources
+extract as = Resources
+    <$> inject extractPoliMorf (poliMorfPath as)
+    <*> inject extractProlexbase (prolexPath as)
+    <*> inject extractPNEG (pnegPath as)
+    <*> inject extractNELexicon (neLexPath as)
+    <*> inject extractIntTriggers (pnetPath as)
+    <*> inject extractExtTriggers (pnetPath as)
+
+inject :: (a -> IO b) -> Maybe a -> IO (Maybe b)
+inject f (Just x) = do
+    y <- f x
+    return (Just y)
+inject _ Nothing = return Nothing
 
 main :: IO ()
 main = exec =<< cmdArgsRun argModes
 
 exec :: Args -> IO ()
 
-exec TrainMode{..} = do
-    cfg  <- defaultConf dictsPath intTrigsPath extTrigsPath
+exec as@TrainMode{..} = do
+    Resources{..} <- extract as
+    cfg <- defaultConf
+        (catMaybes [poliDict, prolexDict, pnegDict, neLexDict])
+        intDict extDict
     nerf <- train sgdArgs cfg trainPath evalPath
     when (not . null $ outNerf) $ do
         putStrLn $ "\nSaving model in " ++ outNerf ++ "..."
@@ -141,15 +133,12 @@ exec NerMode{..} = do
         let forest = ner nerf sent
         L.putStrLn (showForest forest)
 
-exec OxMode{..} = do
-    cfg  <- defaultConf dictsPath intTrigsPath extTrigsPath
+exec as@OxMode{..} = do
+    Resources{..} <- extract as
+    cfg <- defaultConf
+        (catMaybes [poliDict, prolexDict, pnegDict, neLexDict])
+        intDict extDict
     tryOx cfg dataPath
-
-exec PoliMode{..} = preparePoliMorf poliPath outPath
-exec PnegMode{..} = preparePNEG lmfPath outPath
-exec ProlexMode{..} = prepareProlexbase prolexPath outPath
-exec PnetMode{..} = preparePNET pnetPath intPath extPath
-exec NeLexMode{..} = prepareNELexicon nePath outPath
 
 parseRaw :: L.Text -> [[T.Text]]
 parseRaw =
