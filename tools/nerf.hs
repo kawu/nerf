@@ -15,7 +15,7 @@ import qualified Data.Text.Lazy.IO as L
 
 import NLP.Nerf (train, ner, tryOx)
 import NLP.Nerf.Schema (defaultConf)
-import NLP.Nerf.Dict (preparePNEG, prepareNELexicon)
+import NLP.Nerf.Dict (preparePoliMorf, preparePNEG, prepareNELexicon)
 
 data Args
   = TrainMode
@@ -34,12 +34,14 @@ data Args
   | OxMode
     { dataPath      :: FilePath
     , neDictPath    :: FilePath }
+  | PoliMode
+    { poliPath      :: FilePath
+    , outPath       :: FilePath }
   | PnegMode
     { lmfPath       :: FilePath
     , outPath       :: FilePath }
   | NeLexMode
     { nePath        :: FilePath
-    , poliPath      :: FilePath
     , outPath       :: FilePath }
   deriving (Data, Typeable, Show)
 
@@ -58,14 +60,17 @@ trainMode = TrainMode
 nerMode :: Args
 nerMode = NerMode
     { inNerf = def &= argPos 0 &= typ "NERF-FILE"
-    , dataPath = def &= argPos 2 &= typ "INPUT" }
---     , dataPath = def &= typFile &= help "Input" }
---         &= help "Input file; if not specified, read from stdin" }
+    , dataPath = def &= argPos 1 &= typ "INPUT" }
 
 oxMode :: Args
 oxMode = OxMode
     { dataPath = def &= argPos 0 &= typ "DATA-FILE"
     , neDictPath = def &= argPos 1 &= typ "NE-DICT-FILE" }
+
+poliMode :: Args
+poliMode = PoliMode
+    { poliPath = def &= typ "PoliMorf" &= argPos 0
+    , outPath = def &= typ "Output" &= argPos 1 }
 
 pnegMode :: Args
 pnegMode = PnegMode
@@ -75,11 +80,11 @@ pnegMode = PnegMode
 neLexMode :: Args
 neLexMode = NeLexMode
     { nePath = def &= typ "NELexicon" &= argPos 0
-    , poliPath = def &= typ "PoliMorf" &= argPos 1
-    , outPath = def &= typ "Output" &= argPos 2 }
+    , outPath = def &= typ "Output" &= argPos 1 }
 
 argModes :: Mode (CmdArgs Args)
-argModes = cmdArgsMode $ modes [trainMode, nerMode, oxMode, pnegMode, neLexMode]
+argModes = cmdArgsMode $
+    modes [trainMode, nerMode, oxMode, poliMode, pnegMode, neLexMode]
 
 main :: IO ()
 main = exec =<< cmdArgsRun argModes
@@ -111,8 +116,9 @@ exec OxMode{..} = do
     cfg  <- defaultConf neDictPath
     tryOx cfg dataPath
 
+exec PoliMode{..} = preparePoliMorf poliPath outPath
 exec PnegMode{..} = preparePNEG lmfPath outPath
-exec NeLexMode{..} = prepareNELexicon nePath poliPath outPath
+exec NeLexMode{..} = prepareNELexicon nePath outPath
 
 parseRaw :: L.Text -> [[T.Text]]
 parseRaw =

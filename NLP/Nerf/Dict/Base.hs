@@ -10,7 +10,8 @@ module NLP.Nerf.Dict.Base
 
 -- * Dictionary
 , NeDict
-, mkDict
+, fromPairs
+, fromEntries
 , siftDict
 , saveDict
 , loadDict
@@ -20,6 +21,7 @@ module NLP.Nerf.Dict.Base
 , diff
 ) where
 
+import Control.Applicative ((<$>), (<*>))
 import Data.Binary (encodeFile, decodeFile)
 import Data.Text.Binary ()
 import qualified Data.Text as T
@@ -47,12 +49,16 @@ data Entry = Entry
 -- word graph.
 type NeDict = D.DAWG (S.Set NeType)
 
--- | Construct the dictionary from the list of entries.
-mkDict :: [Entry] -> NeDict
-mkDict xs = D.fromListWith S.union
-    [ ( T.unpack (neOrth x)
-      , S.singleton (neType x))
-    | x <- xs ]
+-- | Construct dictionary from the list of form/neType pairs.
+fromPairs :: [(Form, NeType)] -> NeDict
+fromPairs xs = D.fromListWith S.union
+    [ ( T.unpack x
+      , S.singleton y)
+    | (x, y) <- xs ]
+
+-- | Construct dictionary from the list of entries.
+fromEntries :: [Entry] -> NeDict
+fromEntries = fromPairs . map ((,) <$> neOrth <*> neType)
 
 -- | Remove dictionary entries which do not satisfy the predicate.
 siftDict :: (Form -> S.Set NeType -> Bool) -> NeDict -> NeDict
