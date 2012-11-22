@@ -12,11 +12,9 @@ import NLP.Nerf.Dict.Base
 import NLP.Nerf.Dict.PNEG (readPNEG)
 import NLP.Nerf.Dict.NELexicon (readNELexicon)
 
--- | Make dictionary consisting only from one word NEs.
-mkDictW1 :: [Entry] -> NeDict
-mkDictW1 =
-    let oneWord x _ = not (isMultiWord x)
-    in  siftDict oneWord . mkDict
+-- | Is it a single word entry?
+atomic :: Entry -> Bool
+atomic = not . isMultiWord . neOrth
 
 -- | Parse the PNEG dictionary and save it in a binary form into
 -- the output file.
@@ -25,7 +23,7 @@ preparePNEG
     -> FilePath     -- ^ Output file
     -> IO ()
 preparePNEG lmfPath outPath = do
-    neDict <- mkDictW1 <$> readPNEG lmfPath
+    neDict <- mkDict . filter atomic <$> readPNEG lmfPath
     saveDict outPath neDict
 
 -- | Parse the NELexicon, merge it with the PoliMorf and serialize
@@ -36,6 +34,6 @@ prepareNELexicon
     -> FilePath     -- ^ Output file
     -> IO ()
 prepareNELexicon nePath poliPath outPath = do
-    neDict  <- mkDictW1 <$> readNELexicon nePath
+    neDict  <- mkDict . filter atomic <$> readNELexicon nePath
     baseMap <- Poli.mkBaseMap <$> Poli.readPoliMorf poliPath
     encodeFile outPath (Poli.merge baseMap neDict)

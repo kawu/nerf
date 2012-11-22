@@ -24,7 +24,6 @@ import Data.Binary (encodeFile, decodeFile)
 import Data.Text.Binary ()
 import qualified Data.Text as T
 import qualified Data.Set as S
--- import qualified Data.Map as M
 import qualified Data.DAWG as D
 
 -- | A orthographic form.
@@ -53,7 +52,7 @@ mkDict :: [Entry] -> NeDict
 mkDict xs = D.fromListWith S.union
     [ ( T.unpack (neOrth x)
       , S.singleton (neType x))
-    | x <- xs]
+    | x <- xs ]
 
 -- | Remove dictionary entries which do not satisfy the predicate.
 siftDict :: (Form -> S.Set NeType -> Bool) -> NeDict -> NeDict

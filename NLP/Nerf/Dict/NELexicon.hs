@@ -16,7 +16,7 @@ parseNELexicon = map parseLine . L.lines
 
 parseLine :: L.Text -> Entry
 parseLine line = case L.break (==';') line of
-    (_type, _form) -> Entry (L.toStrict $ L.tail _form) (L.toStrict _type)
+    (_type, _form) -> Entry (L.toStrict $ L.drop 2 _form) (L.toStrict _type)
     _   -> error $ "parseLine: invalid line \"" ++ L.unpack line ++ "\""
 
 -- | Read the dictionary from the file.
