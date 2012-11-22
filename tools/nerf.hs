@@ -21,42 +21,42 @@ import NLP.Nerf.Dict
     ( extractPoliMorf, extractPNEG, extractNELexicon, extractProlexbase
     , extractIntTriggers, extractExtTriggers, Dict )
 
-data Args
-  = TrainMode
+data Nerf
+  = Train
     { trainPath     :: FilePath
-    , evalPath      :: Maybe FilePath
-    , poliMorfPath  :: Maybe FilePath
-    , prolexPath    :: Maybe FilePath
-    , pnegPath      :: Maybe FilePath
-    , neLexPath     :: Maybe FilePath
-    , pnetPath      :: Maybe FilePath
+    , eval          :: Maybe FilePath
+    , poliMorf      :: Maybe FilePath
+    , prolex        :: Maybe FilePath
+    , pneg          :: Maybe FilePath
+    , neLex         :: Maybe FilePath
+    , pnet          :: Maybe FilePath
     , iterNum       :: Double
     , batchSize     :: Int
     , regVar        :: Double
     , gain0         :: Double
     , tau           :: Double
     , outNerf       :: FilePath }
-  | NerMode
+  | NER
     { dataPath      :: FilePath
     , inNerf        :: FilePath }
-  | OxMode
+  | Ox
     { dataPath      :: FilePath
-    , poliMorfPath  :: Maybe FilePath
-    , prolexPath    :: Maybe FilePath
-    , pnegPath      :: Maybe FilePath
-    , neLexPath     :: Maybe FilePath
-    , pnetPath      :: Maybe FilePath }
+    , poliMorf      :: Maybe FilePath
+    , prolex        :: Maybe FilePath
+    , pneg          :: Maybe FilePath
+    , neLex         :: Maybe FilePath
+    , pnet          :: Maybe FilePath }
   deriving (Data, Typeable, Show)
 
-trainMode :: Args
-trainMode = TrainMode
+trainMode :: Nerf
+trainMode = Train
     { trainPath = def &= argPos 0 &= typ "TRAIN-FILE"
-    , evalPath = def &= typFile &= help "Evaluation file"
-    , poliMorfPath = def &= typFile &= help "Path to PoliMorf"
-    , prolexPath = def &= typFile &= help "Path to Prolexbase"
-    , pnegPath = def &= typFile &= help "Path to PNEG-LMF"
-    , neLexPath = def &= typFile &= help "Path to NELexicon"
-    , pnetPath = def &= typFile &= help "Path to PNET"
+    , eval = def &= typFile &= help "Evaluation file"
+    , poliMorf = def &= typFile &= help "Path to PoliMorf"
+    , prolex = def &= typFile &= help "Path to Prolexbase"
+    , pneg = def &= typFile &= help "Path to PNEG-LMF"
+    , neLex = def &= typFile &= help "Path to NELexicon"
+    , pnet = def &= typFile &= help "Path to PNET"
     , iterNum = 10 &= help "Number of SGD iterations"
     , batchSize = 30 &= help "Batch size"
     , regVar = 10.0 &= help "Regularization variance"
@@ -64,21 +64,21 @@ trainMode = TrainMode
     , tau = 5.0 &= help "Initial tau parameter"
     , outNerf = def &= typFile &= help "Output Nerf file" }
 
-nerMode :: Args
-nerMode = NerMode
+nerMode :: Nerf
+nerMode = NER
     { inNerf = def &= argPos 0 &= typ "NERF-FILE"
     , dataPath = def &= argPos 1 &= typ "INPUT" }
 
-oxMode :: Args
-oxMode = OxMode
+oxMode :: Nerf
+oxMode = Ox
     { dataPath = def &= argPos 0 &= typ "DATA-FILE"
-    , poliMorfPath = def &= typFile &= help "Path to PoliMorf"
-    , prolexPath = def &= typFile &= help "Path to Prolexbase"
-    , pnegPath = def &= typFile &= help "Path to PNEG-LMF"
-    , neLexPath = def &= typFile &= help "Path to NELexicon"
-    , pnetPath = def &= typFile &= help "Path to PNET" }
+    , poliMorf = def &= typFile &= help "Path to PoliMorf"
+    , prolex = def &= typFile &= help "Path to Prolexbase"
+    , pneg = def &= typFile &= help "Path to PNEG-LMF"
+    , neLex = def &= typFile &= help "Path to NELexicon"
+    , pnet = def &= typFile &= help "Path to PNET" }
 
-argModes :: Mode (CmdArgs Args)
+argModes :: Mode (CmdArgs Nerf)
 argModes = cmdArgsMode $ modes [trainMode, nerMode, oxMode]
 
 data Resources = Resources
@@ -89,14 +89,14 @@ data Resources = Resources
     , intDict       :: Maybe Dict
     , extDict       :: Maybe Dict }
 
-extract :: Args -> IO Resources
-extract as = Resources
-    <$> inject extractPoliMorf (poliMorfPath as)
-    <*> inject extractProlexbase (prolexPath as)
-    <*> inject extractPNEG (pnegPath as)
-    <*> inject extractNELexicon (neLexPath as)
-    <*> inject extractIntTriggers (pnetPath as)
-    <*> inject extractExtTriggers (pnetPath as)
+extract :: Nerf -> IO Resources
+extract nerf = Resources
+    <$> inject extractPoliMorf (poliMorf nerf)
+    <*> inject extractProlexbase (prolex nerf)
+    <*> inject extractPNEG (pneg nerf)
+    <*> inject extractNELexicon (neLex nerf)
+    <*> inject extractIntTriggers (pnet nerf)
+    <*> inject extractExtTriggers (pnet nerf)
 
 inject :: (a -> IO b) -> Maybe a -> IO (Maybe b)
 inject f (Just x) = do
@@ -107,14 +107,14 @@ inject _ Nothing = return Nothing
 main :: IO ()
 main = exec =<< cmdArgsRun argModes
 
-exec :: Args -> IO ()
+exec :: Nerf -> IO ()
 
-exec as@TrainMode{..} = do
-    Resources{..} <- extract as
+exec nerfArgs@Train{..} = do
+    Resources{..} <- extract nerfArgs
     cfg <- defaultConf
         (catMaybes [poliDict, prolexDict, pnegDict, neLexDict])
         intDict extDict
-    nerf <- train sgdArgs cfg trainPath evalPath
+    nerf <- train sgdArgs cfg trainPath eval
     when (not . null $ outNerf) $ do
         putStrLn $ "\nSaving model in " ++ outNerf ++ "..."
         encodeFile outNerf nerf
@@ -126,15 +126,15 @@ exec as@TrainMode{..} = do
         , SGD.gain0 = gain0
         , SGD.tau = tau }
 
-exec NerMode{..} = do
+exec NER{..} = do
     nerf  <- decodeFile inNerf
     input <- readRaw dataPath
     forM_ input $ \sent -> do
         let forest = ner nerf sent
         L.putStrLn (showForest forest)
 
-exec as@OxMode{..} = do
-    Resources{..} <- extract as
+exec nerfArgs@Ox{..} = do
+    Resources{..} <- extract nerfArgs
     cfg <- defaultConf
         (catMaybes [poliDict, prolexDict, pnegDict, neLexDict])
         intDict extDict
