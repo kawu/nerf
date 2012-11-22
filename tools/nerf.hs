@@ -19,8 +19,8 @@ import NLP.Nerf.Dict (preparePoliMorf, preparePNEG, prepareNELexicon)
 
 data Args
   = TrainMode
-    { trainPath	    :: FilePath
-    , neDictPath    :: FilePath
+    { trainPath     :: FilePath
+    , dictsPath     :: [FilePath]
     , evalPath      :: Maybe FilePath
     , iterNum       :: Double
     , batchSize     :: Int
@@ -33,7 +33,7 @@ data Args
     , inNerf        :: FilePath }
   | OxMode
     { dataPath      :: FilePath
-    , neDictPath    :: FilePath }
+    , dictsPath     :: [FilePath] }
   | PoliMode
     { poliPath      :: FilePath
     , outPath       :: FilePath }
@@ -48,7 +48,7 @@ data Args
 trainMode :: Args
 trainMode = TrainMode
     { trainPath = def &= argPos 0 &= typ "TRAIN-FILE"
-    , neDictPath = def &= argPos 1 &= typ "NE-DICT-FILE"
+    , dictsPath = def &= help "Named Entity dictionaries"
     , evalPath = def &= typFile &= help "Evaluation file"
     , iterNum = 10 &= help "Number of SGD iterations"
     , batchSize = 30 &= help "Batch size"
@@ -65,7 +65,7 @@ nerMode = NerMode
 oxMode :: Args
 oxMode = OxMode
     { dataPath = def &= argPos 0 &= typ "DATA-FILE"
-    , neDictPath = def &= argPos 1 &= typ "NE-DICT-FILE" }
+    , dictsPath = def &= help "Named Entity dictionaries" }
 
 poliMode :: Args
 poliMode = PoliMode
@@ -92,7 +92,7 @@ main = exec =<< cmdArgsRun argModes
 exec :: Args -> IO ()
 
 exec TrainMode{..} = do
-    cfg  <- defaultConf neDictPath
+    cfg  <- defaultConf dictsPath
     nerf <- train sgdArgs cfg trainPath evalPath
     when (not . null $ outNerf) $ do
         putStrLn $ "\nSaving model in " ++ outNerf ++ "..."
@@ -113,7 +113,7 @@ exec NerMode{..} = do
         L.putStrLn (showForest forest)
 
 exec OxMode{..} = do
-    cfg  <- defaultConf neDictPath
+    cfg  <- defaultConf dictsPath
     tryOx cfg dataPath
 
 exec PoliMode{..} = preparePoliMorf poliPath outPath

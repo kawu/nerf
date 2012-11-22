@@ -69,8 +69,8 @@ type Schema a = V.Vector Word -> Int -> Ox a
 void :: a -> Schema a
 void x _ _ = return x
 
--- | Sequence the list of schemas and discard individual values.
-sequenceS_ :: [Schema a] -> Schema ()
+-- | Sequence the list of schemas (or blocks) and discard individual values.
+sequenceS_ :: [V.Vector Word -> a -> Ox b] -> V.Vector Word -> a -> Ox ()
 sequenceS_ xs sent =
     let ys = map ($sent) xs
     in  \k -> sequence_ (map ($k) ys)
@@ -132,12 +132,10 @@ lowPrefixesB ns sent = \ks ->
 lowSuffixesB :: [Int] -> Block ()
 lowSuffixesB ns sent = \ks ->
     forM_ ks $ \i ->
-        mapM_ (Ox.save . lowSuffix i) ns -- [2, 3, 4]
+        mapM_ (Ox.save . lowSuffix i) ns
   where
     BaseOb{..}      = mkBaseOb sent
     lowSuffix i j   = Ox.suffix j =<< lowOrth i
-
--- TODO: Implement lemmaB on top of lowSuffixB and logPrefixB.
 
 -- | Lemma substitute parametrized by the number specifying the span
 -- over which lowercased prefixes and suffixes will be 'Ox.save'd.
@@ -151,7 +149,7 @@ lemmaB n sent = \ks -> do
     lowPrefix i j   = Ox.prefix j =<< lowOrth i
     lowSuffix i j   = Ox.suffix j =<< lowOrth i
     lowLemma i = Ox.group $ do
-        mapM_ (Ox.save . lowPrefix i) [0, -1 .. -n] -- [0, -1, -2, -3]
+        mapM_ (Ox.save . lowPrefix i) [0, -1 .. -n]
         mapM_ (Ox.save . lowSuffix i) [0, -1 .. -n]
 
 -- | Shape of the word.
@@ -202,18 +200,6 @@ packedPairB sent = \ks ->
     shape i         = Ox.shape <$> orth i
     shapeP i        = Ox.pack <$> shape i
     link x y        = T.concat [x, "-", y]
-
--- -- | Shape pairs determined with respect to the list of relative positions.
--- shapePairB :: Block ()
--- shapePairB sent = \ks ->
---     forM_ ks $ \i -> do
---         Ox.save $ link <$> shape  i <*> shape  (i - 1)
---         Ox.save $ link <$> shapeP i <*> shapeP (i - 1)
---   where
---     BaseOb{..}      = mkBaseOb sent
---     shape i         = Ox.shape <$> orth i
---     shapeP i        = Ox.pack <$> shape i
---     link x y        = T.concat [x, "-", y]
 
 -- | Plain dictionary search determined with respect to the list of
 -- relative positions.
@@ -276,7 +262,7 @@ data SchemaConf = SchemaConf {
     -- | The 'packedPairB' schema block.
     , packedPairC       :: Entry ()
     -- | The 'searchB' schema block.
-    , searchC           :: Entry Dict.NeDict
+    , searchC           :: Entry [Dict.NeDict]
     } deriving (Show)
 
 instance Binary SchemaConf where
@@ -305,10 +291,10 @@ nullConf = SchemaConf
 
 -- | Default configuration of the observation schema.
 defaultConf
-    :: FilePath     -- ^ Path to 'Dict.NeDict' in a binary form
+    :: [FilePath]     -- ^ Path to 'Dict.NeDict's in binary forms
     -> IO SchemaConf
-defaultConf nePath = do
-    neDict <- decodeFile nePath
+defaultConf nePaths = do
+    neDicts <- mapM decodeFile nePaths
     return $ SchemaConf
         { orthC         = Nothing
         , splitOrthC    = entry                 [-1, 0]
@@ -319,7 +305,7 @@ defaultConf nePath = do
         , packedC       = entry                 [-1, 0]
         , shapePairC    = entry                 [0]
         , packedPairC   = entry                 [0]
-        , searchC       = entryWith neDict      [-1, 0] }
+        , searchC       = entryWith neDicts     [-1, 0] }
 
 mkArg0 :: Block () -> Entry () -> Schema ()
 mkArg0 blk (Just x) = fromBlock blk (range x)
@@ -329,15 +315,19 @@ mkArg1 :: (a -> Block ()) -> Entry a -> Schema ()
 mkArg1 blk (Just x) = fromBlock (blk (args x)) (range x)
 mkArg1 _   Nothing  = void ()
 
--- mkDictS :: Maybe (Dict.NeDict, [Int]) -> Schema ()
--- mkDictS (Just (d, xs))  = fromBlock (searchB d) xs
--- mkDictS Nothing         = void ()
+mkArgs1 :: (a -> Block ()) -> Entry [a] -> Schema ()
+mkArgs1 blk (Just x) = sequenceS_
+    [ fromBlock
+        (blk dict)
+        (range x)
+    | dict <- args x ]
+mkArgs1 _   Nothing  = void ()
 
 -- | Build the schema based on the configuration.
 fromConf :: SchemaConf -> Schema ()
 fromConf SchemaConf{..} = sequenceS_
     [ mkArg0 orthB orthC
-    , mkArg0 splitOrthB orthC
+    , mkArg0 splitOrthB splitOrthC
     , mkArg1 lowPrefixesB lowPrefixesC
     , mkArg1 lowSuffixesB lowSuffixesC
     , mkArg1 lemmaB lemmaC
@@ -345,7 +335,7 @@ fromConf SchemaConf{..} = sequenceS_
     , mkArg0 packedB packedC
     , mkArg0 shapePairB shapePairC
     , mkArg0 packedPairB packedPairC
-    , mkArg1 searchB searchC ]
+    , mkArgs1 searchB searchC ]
 
 -- | Use the schema to extract observations from the sentence.
 schematize :: Schema a -> [Word] -> CRF.Sent Ob
