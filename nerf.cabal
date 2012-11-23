@@ -1,5 +1,5 @@
 name:               nerf
-version:            0.2.0
+version:            0.2.1
 synopsis:           Nerf, the named entity recognition tool based on linear-chain CRFs
 description:
     The package provides the named entity recognition (NER) tool divided into a
@@ -49,6 +49,7 @@ library
       , NLP.Nerf.Dict
       , NLP.Nerf.Dict.Base
       , NLP.Nerf.Dict.PNEG
+      , NLP.Nerf.Dict.PNET
       , NLP.Nerf.Dict.NELexicon
       , NLP.Nerf.Dict.Prolexbase
 
@@ -56,7 +57,7 @@ library
 
 source-repository head
     type: git
-    location: git://github.com/kawu/nerf.git
+    location: https://github.com/kawu/nerf.git
 
 executable nerf
   hs-source-dirs: ., tools
