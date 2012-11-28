@@ -17,7 +17,7 @@ import qualified Numeric.SGD as SGD
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as L
 import qualified Data.Text.Lazy.IO as L
-import qualified Data.DAWG as D
+import qualified Data.DAWG.Static as D
 
 import NLP.Nerf (train, ner, tryOx)
 import NLP.Nerf.Schema (defaultConf)

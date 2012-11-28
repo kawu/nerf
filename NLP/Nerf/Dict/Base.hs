@@ -12,6 +12,7 @@ module NLP.Nerf.Dict.Base
 
 -- * Dictionary
 , Label
+, DAWG
 , Dict
 , fromPairs
 , fromEntries
@@ -29,7 +30,8 @@ import Data.Binary (encodeFile, decodeFile)
 import Data.Text.Binary ()
 import qualified Data.Text as T
 import qualified Data.Set as S
-import qualified Data.DAWG as D
+import qualified Data.DAWG.Static as D
+import qualified Data.DAWG.Trans.Vector as D
 
 -- | A type of named entity.
 type NeType = T.Text
@@ -53,7 +55,9 @@ type Label = T.Text
 -- | A 'Dict' is a map from forms to labels.  Each form may be annotated
 -- with multiple labels.  The map is represented using the directed acyclic
 -- word graph.
-type Dict = D.DAWG (S.Set Label)
+-- type Dict = D.DAWG (S.Set Label)
+type DAWG = D.DAWG D.Trans Char ()
+type Dict = DAWG (S.Set Label)
 
 -- | Construct dictionary from the list of form/label pairs.
 fromPairs :: [(Form, Label)] -> Dict
@@ -84,12 +88,12 @@ merge = unionsWith S.union
 
 -- | Replacement implementation of unionsWith while there is
 -- no such function in dawg library. 
-unionsWith :: Ord a => (a -> a -> a) -> [D.DAWG a] -> D.DAWG a
+unionsWith :: Ord a => (a -> a -> a) -> [DAWG a] -> DAWG a
 unionsWith f = foldl (unionWith f) D.empty
 
 -- | Replacement implementation of unionWith while there is
 -- no such function in dawg library. 
-unionWith :: Ord a => (a -> a -> a) -> D.DAWG a -> D.DAWG a -> D.DAWG a
+unionWith :: Ord a => (a -> a -> a) -> DAWG a -> DAWG a -> DAWG a
 unionWith f d d' = D.fromListWith f (D.assocs d ++ D.assocs d')
 
 -- | Differentiate labels from separate dictionaries using
@@ -100,7 +104,7 @@ diff ds =
     | (i, dict) <- zip [0..] ds ]
 
 -- | Map function over the DAWG elements.
-mapD :: Ord b => (a -> b) -> D.DAWG a -> D.DAWG b
+mapD :: Ord b => (a -> b) -> DAWG a -> DAWG b
 mapD f d = D.fromList [(x, f y) | (x, y) <- D.assocs d]
 
 -- | Map function over the set.

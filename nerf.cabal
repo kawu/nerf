@@ -1,5 +1,5 @@
 name:               nerf
-version:            0.2.1
+version:            0.2.2
 synopsis:           Nerf, the named entity recognition tool based on linear-chain CRFs
 description:
     The package provides the named entity recognition (NER) tool divided into a
@@ -38,8 +38,8 @@ library
       , data-named >= 0.5 && < 0.6
       , monad-ox >= 0.2 && < 0.3
       , sgd >= 0.2.1 && < 0.3
-      , polimorf >= 0.5.0 && < 0.6
-      , dawg >= 0.5 && < 0.6
+      , polimorf >= 0.6.0 && < 0.7
+      , dawg >= 0.8.1 && < 0.9
       , cmdargs
 
     exposed-modules:

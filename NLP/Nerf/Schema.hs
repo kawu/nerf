@@ -47,7 +47,7 @@ import qualified Data.Char as C
 import qualified Data.Set as S
 import qualified Data.Vector as V
 import qualified Data.Text as T
-import qualified Data.DAWG as D
+import qualified Data.DAWG.Static as D
 
 import qualified Data.CRF.Chain1 as CRF
 import qualified Control.Monad.Ox as Ox
