@@ -62,4 +62,4 @@ source-repository head
 executable nerf
   hs-source-dirs: ., tools
   main-is: nerf.hs
-  ghc-options: -Wall -O2 -threaded
+  ghc-options: -Wall -O2 -threaded -rtsopts
