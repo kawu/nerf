@@ -3,22 +3,42 @@
 
 module NLP.Nerf.Tokenize
 (
+-- * Tokenization
+  tokenize
 -- * Synchronization
-  Size
-, sync
-, match
+, Size
 , moveNEs
 ) where
 
+import Control.Monad ((>=>))
 import Data.Foldable (foldMap)
-import Data.Either (rights)
 import qualified Data.List as L
 import qualified Data.Tree as T
 import qualified Data.Traversable as Tr
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as LazyText
+import qualified NLP.Tokenize as Tok
 
-import Data.Named.Tree (NeForest, NeTree)
+import Data.Named.Tree (NeForest, NeTree, groupForestLeaves)
+
+---------------------------
+-- Tokenization definition.
+---------------------------
+
+-- | Default tokenizator.
+defaultTokenizer :: Tok.Tokenizer
+defaultTokenizer
+    =   Tok.whitespace
+    >=> Tok.uris
+    >=> Tok.punctuation
+
+-- | Tokenize sentence using the default tokenizer.
+tokenize :: String -> [String]
+tokenize = Tok.run defaultTokenizer
+
+---------------------------------------------------------------
+-- Synchronizing named entities with new sentence tokenization.
+---------------------------------------------------------------
 
 -- | A class of objects with size.
 class Size a where
@@ -85,22 +105,6 @@ splitAcc f acc (x:xs)
 leaves :: NeForest a b -> [b]
 leaves = concatMap $ foldMap (either (const []) (:[]))
 
--- | Group leaves by parents.
-groupLeaves :: NeForest a b -> NeForest a [b]
-groupLeaves =
-    map join . L.groupBy (both isLeaf) . map groupLeavesT
-  where
-    both f x y = f x && f y
-    isLeaf (T.Node (Right _) [])    = True
-    isLeaf _                        = False
-    join [x]    = x
-    join xs     =
-        let ys = (concat . rights) (map T.rootLabel xs)
-        in  T.Node (Right ys) []
-
-groupLeavesT :: NeTree a b -> NeTree a [b]
-groupLeavesT (T.Node v xs) = T.Node (fmap (:[]) v) (groupLeaves xs)
-
 unGroupLeaves :: NeForest a [b] -> NeForest a b
 unGroupLeaves = concatMap unGroupLeavesT
 
@@ -129,5 +133,7 @@ moveNEs :: Size b => NeForest a b -> [b] -> NeForest a b
 moveNEs ft ys
     = unGroupLeaves
     $ substGroups
-        (groupLeaves ft)
+        (groupForestLeaves true ft)
         (sync (leaves ft) ys)
+  where
+    true _ _ = True

@@ -13,6 +13,7 @@ module NLP.Nerf
 
 import Control.Applicative ((<$>), (<*>))
 import Data.Binary (Binary, put, get)
+import Data.Foldable (foldMap)
 import qualified Data.Text.Lazy.IO as L
 
 import Text.Named.Enamex (parseEnamex)
@@ -23,6 +24,7 @@ import Numeric.SGD (SgdArgs)
 import qualified Data.CRF.Chain1 as CRF
 
 import NLP.Nerf.Types
+import NLP.Nerf.Tokenize (moveNEs)
 import NLP.Nerf.Schema (SchemaConf, Schema, fromConf, schematize)
 
 -- | A Nerf consists of the observation schema configuration and the CRF model.
@@ -43,8 +45,17 @@ flatten schema forest =
     xs = schematize schema (map IOB.word iob)
     ys = map IOB.label iob
 
+-- | Tokenize sentence with the Nerf tokenizer.
+reTokenize :: Tr.NeForest NE Word -> Tr.NeForest NE Word
+reTokenize ft = 
+    let leaves = concatMap $ foldMap (either (const []) (:[]))
+    in  moveNEs ft (leaves ft)
+
+readDeep :: FilePath -> IO [Tr.NeForest NE Word]
+readDeep path = map reTokenize . parseEnamex <$> L.readFile path
+
 readFlat :: Schema a -> FilePath -> IO [CRF.SentL Ob Lb]
-readFlat schema path = map (flatten schema) . parseEnamex <$> L.readFile path
+readFlat schema path = map (flatten schema) <$> readDeep path
 
 drawSent :: CRF.SentL Ob Lb -> IO ()
 drawSent sent = do
