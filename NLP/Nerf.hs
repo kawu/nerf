@@ -14,17 +14,19 @@ module NLP.Nerf
 import Control.Applicative ((<$>), (<*>))
 import Data.Binary (Binary, put, get)
 import Data.Foldable (foldMap)
+import Data.List (intercalate)
+import qualified Data.Text as T
 import qualified Data.Text.Lazy.IO as L
 
 import Text.Named.Enamex (parseEnamex)
-import qualified Data.Named.Tree as Tr
+import qualified Data.Named.Tree as N
 import qualified Data.Named.IOB as IOB
 
 import Numeric.SGD (SgdArgs)
 import qualified Data.CRF.Chain1 as CRF
 
 import NLP.Nerf.Types
-import NLP.Nerf.Tokenize (moveNEs)
+import NLP.Nerf.Tokenize (tokenize, moveNEs)
 import NLP.Nerf.Schema (SchemaConf, Schema, fromConf, schematize)
 
 -- | A Nerf consists of the observation schema configuration and the CRF model.
@@ -36,7 +38,7 @@ instance Binary Nerf where
     put Nerf{..} = put schemaConf >> put crf
     get = Nerf <$> get <*> get
 
-flatten :: Schema a -> Tr.NeForest NE Word -> CRF.SentL Ob Lb
+flatten :: Schema a -> N.NeForest NE Word -> CRF.SentL Ob Lb
 flatten schema forest =
     [ CRF.annotate x y
     | (x, y) <- zip xs ys ]
@@ -46,12 +48,14 @@ flatten schema forest =
     ys = map IOB.label iob
 
 -- | Tokenize sentence with the Nerf tokenizer.
-reTokenize :: Tr.NeForest NE Word -> Tr.NeForest NE Word
+reTokenize :: N.NeForest NE Word -> N.NeForest NE Word
 reTokenize ft = 
-    let leaves = concatMap $ foldMap (either (const []) (:[]))
-    in  moveNEs ft (leaves ft)
+    moveNEs ft ((doTok . leaves) ft)
+  where 
+    doTok  = map T.pack . tokenize . intercalate " "  . map T.unpack
+    leaves = concatMap $ foldMap (either (const []) (:[]))
 
-readDeep :: FilePath -> IO [Tr.NeForest NE Word]
+readDeep :: FilePath -> IO [N.NeForest NE Word]
 readDeep path = map reTokenize . parseEnamex <$> L.readFile path
 
 readFlat :: Schema a -> FilePath -> IO [CRF.SentL Ob Lb]
@@ -85,7 +89,7 @@ train sgdArgs cfg trainPath evalPathM = do
     return $ Nerf cfg _crf
 
 -- | Perform named entity recognition (NER) using the Nerf.
-ner :: Nerf -> [Word] -> Tr.NeForest NE Word
+ner :: Nerf -> [Word] -> N.NeForest NE Word
 ner nerf ws =
     let schema = fromConf (schemaConf nerf)
         xs = CRF.tag (crf nerf) (schematize schema ws)

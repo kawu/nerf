@@ -21,6 +21,7 @@ import qualified Data.DAWG.Static as D
 
 import NLP.Nerf (train, ner, tryOx)
 import NLP.Nerf.Schema (defaultConf)
+import NLP.Nerf.Tokenize (tokenize)
 import NLP.Nerf.Dict
     ( extractPoliMorf, extractPNEG, extractNELexicon, extractProlexbase
     , extractIntTriggers, extractExtTriggers, Dict )
@@ -156,10 +157,12 @@ exec nerfArgs@Ox{..} = do
         intDict extDict
     tryOx cfg dataPath
 
+-- | Prepare input data: divide it into a list of sentences and tokenize
+-- each sentence using the default tokenizer.
 parseRaw :: L.Text -> [[T.Text]]
 parseRaw =
-    let toStrict = map L.toStrict
-    in  map (toStrict . L.words) . L.lines
+    let doTok = map T.pack . tokenize . L.unpack
+    in  map doTok . L.lines
 
 readRaw :: FilePath -> IO [[T.Text]]
 readRaw = fmap parseRaw . L.readFile
