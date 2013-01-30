@@ -26,6 +26,8 @@ homepage:           https://github.com/kawu/nerf
 build-type:         Simple
 
 library
+    hs-source-dirs: src
+
     build-depends:
         base >= 4 && < 5
       , containers
@@ -62,6 +64,6 @@ source-repository head
     location: https://github.com/kawu/nerf.git
 
 executable nerf
-  hs-source-dirs: ., tools
+  hs-source-dirs: src, tools
   main-is: nerf.hs
   ghc-options: -Wall -O2 -threaded -rtsopts
