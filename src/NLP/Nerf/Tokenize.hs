@@ -9,7 +9,7 @@ module NLP.Nerf.Tokenize
 -- * Tokenization
   tokenize
 -- * Synchronization
-, Word
+, Word (..)
 , moveNEs
 ) where
 
@@ -46,34 +46,30 @@ tokenize = Tok.run defaultTokenizer
 
 -- | A class of objects with size.
 class Word a where
-    size        :: a -> Int
-    rmSpaces    :: a -> a
+    word :: a -> String
 
 instance Word String where
-    size = length
-    rmSpaces = filter (not . Char.isSpace)
+    word = id
 
 instance Word Text.Text where
-    size = Text.length
-    rmSpaces = Text.filter (not . Char.isSpace)
+    word = Text.unpack
 
 instance Word LazyText.Text where
-    size = fromInteger . toInteger . LazyText.length
-    rmSpaces = LazyText.filter (not . Char.isSpace)
+    word = LazyText.unpack
 
 essence :: Word a => a -> Int
-essence = size . rmSpaces
+essence = length . filter (not . Char.isSpace) . word
 {-# INLINE essence #-}
 
 -- | Syncronization between two sentences.  Each (xs, ys) pair represents
 -- tokens from the two input sentences which corresponds to each other.
-type Sync a = [([a], [a])]
+type Sync a b = [([a], [b])]
 
 -- | Synchronize two tokenizations of the sentence.
-sync :: Word a => [a] -> [a] -> Sync a
+sync :: (Word a, Word b) => [a] -> [b] -> Sync a b
 sync = sync' 0
 
-sync' :: Word a => Int -> [a] -> [a] -> Sync a
+sync' :: (Word a, Word b) => Int -> [a] -> [b] -> Sync a b
 sync' r (x:xs) (y:ys)
     | n + r == m    = ([x], [y])    : sync' 0       xs    ys
     | n + r  < m    = join x        $ sync' (n + r) xs (y:ys)
@@ -90,7 +86,7 @@ sync' _ _  _  = error "sync': bad arguments"
 
 -- | Match the `Sync` with the given list, return the matching result
 -- (snd elements of the `Sync` list) and the rest of the `Sync` list.
-match :: Word a => [a] -> Sync a -> ([a], Sync a)
+match :: (Word a, Word b) => [a] -> Sync a b -> ([b], Sync a b)
 match xs ss =
     let (sl, sr) = splitAcc isMatch 0 ss
     in  (concatMap snd sl, sr)
@@ -126,10 +122,13 @@ unGroupLeavesT (T.Node (Left v) xs)     =
 unGroupLeavesT (T.Node (Right vs) _)   =
     [T.Node (Right v) [] | v <- vs]
 
-substGroups :: Word b => NeForest a [b] -> Sync b -> NeForest a [b]
+substGroups :: (Word b, Word c) => NeForest a [b] -> Sync b c -> NeForest a [c]
 substGroups fs ss = snd $ L.mapAccumL substGroupsT ss fs
 
-substGroupsT :: Word b => Sync b -> NeTree a [b] -> (Sync b, NeTree a [b])
+substGroupsT
+    :: (Word b, Word c)
+    => Sync b c -> NeTree a [b]
+    -> (Sync b c, NeTree a [c])
 substGroupsT =
     Tr.mapAccumL f
   where
@@ -141,7 +140,7 @@ substGroupsT =
 -- | Synchronize named entities with tokenization represented
 -- by the second function argument.  Of course, both arguments
 -- should relate to the same sentence.
-moveNEs :: Word b => NeForest a b -> [b] -> NeForest a b
+moveNEs :: (Word b, Word c) => NeForest a b -> [c] -> NeForest a c
 moveNEs ft ys
     = unGroupLeaves
     $ substGroups

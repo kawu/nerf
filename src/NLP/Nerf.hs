@@ -89,8 +89,9 @@ train sgdArgs cfg trainPath evalPathM = do
     return $ Nerf cfg _crf
 
 -- | Perform named entity recognition (NER) using the Nerf.
-ner :: Nerf -> [Word] -> N.NeForest NE Word
-ner nerf ws =
-    let schema = fromConf (schemaConf nerf)
+ner :: Nerf -> String -> N.NeForest NE Word
+ner nerf sent =
+    let ws = map T.pack . tokenize $ sent
+        schema = fromConf (schemaConf nerf)
         xs = CRF.tag (crf nerf) (schematize schema ws)
     in  IOB.decodeForest [IOB.IOB w x | (w, x) <- zip ws xs]

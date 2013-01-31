@@ -14,14 +14,12 @@ import Data.Binary (encodeFile, decodeFile)
 import Data.Text.Binary ()
 import Text.Named.Enamex (showForest)
 import qualified Numeric.SGD as SGD
-import qualified Data.Text as T
 import qualified Data.Text.Lazy as L
 import qualified Data.Text.Lazy.IO as L
 import qualified Data.DAWG.Static as D
 
 import NLP.Nerf (train, ner, tryOx)
 import NLP.Nerf.Schema (defaultConf)
-import NLP.Nerf.Tokenize (tokenize)
 import NLP.Nerf.Dict
     ( extractPoliMorf, extractPNEG, extractNELexicon, extractProlexbase
     , extractIntTriggers, extractExtTriggers, Dict )
@@ -147,7 +145,7 @@ exec NER{..} = do
     nerf  <- decodeFile inNerf
     input <- readRaw dataPath
     forM_ input $ \sent -> do
-        let forest = ner nerf sent
+        let forest = ner nerf (L.unpack sent)
         L.putStrLn (showForest forest)
 
 exec nerfArgs@Ox{..} = do
@@ -157,12 +155,5 @@ exec nerfArgs@Ox{..} = do
         intDict extDict
     tryOx cfg dataPath
 
--- | Prepare input data: divide it into a list of sentences and tokenize
--- each sentence using the default tokenizer.
-parseRaw :: L.Text -> [[T.Text]]
-parseRaw =
-    let doTok = map T.pack . tokenize . L.unpack
-    in  map doTok . L.lines
-
-readRaw :: FilePath -> IO [[T.Text]]
-readRaw = fmap parseRaw . L.readFile
+readRaw :: FilePath -> IO [L.Text]
+readRaw = fmap L.lines . L.readFile
