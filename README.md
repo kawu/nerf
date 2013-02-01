@@ -55,6 +55,9 @@ For example:
 
     <organization>Church of the <deity>Flying Spaghetti Monste</deity></organization>
 
+Text and label values should be escaped by prepending the `\` character before special
+`>`, `<`, `\` and ` ` (space) characters.
+
 NER input data
 --------------
 
