@@ -59,7 +59,7 @@ NER input data
 --------------
 
 When the tool is used in the NER mode each sentence should be in a separate line.
-Its because Nerf currenlty doesn't perform any sentence level segmentation.
+It's because Nerf currently doesn't perform any sentence level segmentation.
 
 Training
 ========
@@ -102,5 +102,5 @@ To annotate the `input.txt` data file using the trained `model.bin` model, run:
 
     nerf ner model.bin input.txt
 
-Data anotated with recognized entities will be printed to `stdout`.
-Remember that each sentence in the input file should be in a separate line.
+Anotated data will be printed to `stdout`.  Remember that each sentence in the
+input file should be in a separate line.

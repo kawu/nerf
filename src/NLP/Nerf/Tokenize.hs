@@ -44,7 +44,7 @@ tokenize = Tok.run defaultTokenizer
 -- Synchronizing named entities with new sentence tokenization.
 ---------------------------------------------------------------
 
--- | A class of objects with size.
+-- | A class of objects which can be converted to `String`.
 class Word a where
     word :: a -> String
 
