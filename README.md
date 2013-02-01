@@ -3,7 +3,7 @@ Nerf
 
 Nerf is a statistical named entity recognition (NER) tool based on linear-chain
 conditional random fields (CRFs).
-It has been adapted to recognize tree-like structures of NEs (i.e., with
+It has been designed to recognize tree-like structures of NEs (i.e., with
 recursively embedded NEs) by using the joined label tagging method which
 -- for a particular sentence -- works as follows:
 
