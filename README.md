@@ -53,7 +53,7 @@ The current version of Nerf works with a simple data format in which:
 
 For example:
 
-    <organization>Church of the <deity>Flying Spaghetti Monste</deity></organization>
+    <organization>Church of the <deity>Flying Spaghetti Monster</deity></organization>
 
 Text and label values should be escaped by prepending the `\` character before special
 `>`, `<`, `\` and ` ` (space) characters.
