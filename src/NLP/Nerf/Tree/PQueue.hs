@@ -1,6 +1,6 @@
-module NLP.Nerf.Tree.PQ
+module NLP.Nerf.Tree.PQueue
 ( PQ
-, mkPQ
+, newPQ
 , update
 , popMin
 , popMax
@@ -27,8 +27,8 @@ instance Ord QNode where
 newtype PQ a = PQ { _unPQ :: M.Map QNode a }
 
 -- | Make priority queue with given sentence length.
-mkPQ :: PQ a
-mkPQ = PQ $ M.empty
+newPQ :: PQ a
+newPQ = PQ $ M.empty
 
 -- | Update element in the queue (or insert new element it there
 -- is no such element in the queue).
