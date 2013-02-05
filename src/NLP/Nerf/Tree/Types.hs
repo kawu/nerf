@@ -7,6 +7,7 @@ module NLP.Nerf.Tree.Types
 , Phi
 , Sent
 , Rule (..)
+, Trans (..)
 , Strat
 , Node (..)
 -- , NCM (..)
@@ -22,17 +23,17 @@ import qualified Data.Vector.Unboxed as U
 -- types which could be used on the level of external tree model
 -- interface.
 
--- | A position in a sentence (starting from 1).
+-- | A position in a sentence (0, 1, ...).
 newtype Pos = Pos { unPos :: Int } deriving
     ( Show, Read, Eq, Ord, Enum, Binary
     , Vector U.Vector, MVector U.MVector, U.Unbox )
 
--- | An observation.
+-- | An observation (0, 1, ...).
 newtype Ob = Ob { unOb :: Int } deriving
     ( Show, Read, Eq, Ord, Enum, Binary
     , Vector U.Vector, MVector U.MVector, U.Unbox )
 
--- | A label.
+-- | A label (0, 1, ...).
 newtype Lb = Lb { unLb :: Int } deriving
     ( Show, Read, Eq, Ord, Enum, Binary
     , Vector U.Vector, MVector U.MVector, U.Unbox )
@@ -48,6 +49,12 @@ data Rule = Rule
     { top   :: {-# UNPACK #-} !Lb
     , left  :: {-# UNPACK #-} !Lb
     , right :: {-# UNPACK #-} !Lb }
+    deriving (Show, Eq, Ord)
+
+-- | A transition between root labels.
+data Trans = Trans
+    { from  :: {-# UNPACK #-} !Lb
+    , to    :: {-# UNPACK #-} !Lb }
     deriving (Show, Eq, Ord)
 
 -- | A computation strategy.
