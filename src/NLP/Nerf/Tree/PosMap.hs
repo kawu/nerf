@@ -2,7 +2,7 @@
 
 module NLP.Nerf.Tree.PosMap
 ( PM
-, newPM
+, empty
 , insert
 , begOn
 , endOn
@@ -19,9 +19,9 @@ data PM a = PM {
     -- | Set of nodes ending on a given position.
     , _endOn :: M.Map Pos [(Node, a)] }
 
--- | New position map.
-newPM :: PM a
-newPM = PM M.empty M.empty
+-- | Empty position map.
+empty :: PM a
+empty = PM M.empty M.empty
 
 -- | Insert element to a position map.  TODO: some optimization?
 -- The current definition can easily lead to a memory leak or a

@@ -22,7 +22,7 @@ import qualified Data.Vector.Unboxed as U
 -- types which could be used on the level of external tree model
 -- interface.
 
--- | A position in a sentence.
+-- | A position in a sentence (starting from 1).
 newtype Pos = Pos { unPos :: Int } deriving
     ( Show, Read, Eq, Ord, Enum, Binary
     , Vector U.Vector, MVector U.MVector, U.Unbox )
@@ -51,10 +51,7 @@ data Rule = Rule
     deriving (Show, Eq, Ord)
 
 -- | A computation strategy.
-type Strat = Pos -> Pos -> Lb -> Bool
-
--- -- | A grammar.
--- type Grammar = S.Set 
+type Strat a = Pos -> Pos -> a -> Bool
 
 -- | A computation node.
 data Node = Node
@@ -62,6 +59,3 @@ data Node = Node
     , end   :: {-# UNPACK #-} !Pos
     , val   :: {-# UNPACK #-} !Lb }
     deriving (Show, Eq, Ord)
-
--- -- | A Nerf computation monad.
--- data NCM a = NCM a
