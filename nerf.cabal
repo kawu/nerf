@@ -1,5 +1,5 @@
 name:               nerf
-version:            0.4.0
+version:            1.0.0
 synopsis:           Nerf, the named entity recognition tool based on linear-chain CRFs
 description:
     The package provides the named entity recognition (NER) tool divided into a
@@ -56,6 +56,10 @@ library
       , NLP.Nerf.Dict.PNET
       , NLP.Nerf.Dict.NELexicon
       , NLP.Nerf.Dict.Prolexbase
+
+    other-modules:
+        NLP.Nerf.Tree.Types
+      , NLP.Nerf.Tree.PQ
 
     ghc-options: -Wall -O2
 
