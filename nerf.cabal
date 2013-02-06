@@ -60,6 +60,7 @@ library
     other-modules:
         NLP.Nerf.Tree.Types
       , NLP.Nerf.Tree.Alpha
+      , NLP.Nerf.Tree.Alpha.Generic
       , NLP.Nerf.Tree.PQueue
       , NLP.Nerf.Tree.PosMap
 

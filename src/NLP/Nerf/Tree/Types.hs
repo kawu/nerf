@@ -57,12 +57,13 @@ data Trans = Trans
     , to    :: {-# UNPACK #-} !Lb }
     deriving (Show, Eq, Ord)
 
--- | A computation strategy.
-type Strat a = Pos -> Pos -> a -> Bool
-
 -- | A computation node.
 data Node = Node
     { beg   :: {-# UNPACK #-} !Pos
     , end   :: {-# UNPACK #-} !Pos
     , val   :: {-# UNPACK #-} !Lb }
     deriving (Show, Eq, Ord)
+
+-- | A computation strategy.
+type Strat = Node -> Bool
+
