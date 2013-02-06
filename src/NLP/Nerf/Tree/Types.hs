@@ -1,15 +1,12 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module NLP.Nerf.Tree.Types
-( Pos (..)
+( Ps (..)
 , Ob (..)
 , Lb (..)
-, Phi
 , Sent
 , Rule (..)
 , Trans (..)
-, Strat
-, Node (..)
 -- , NCM (..)
 ) where
 
@@ -24,7 +21,7 @@ import qualified Data.Vector.Unboxed as U
 -- interface.
 
 -- | A position in a sentence (0, 1, ...).
-newtype Pos = Pos { unPos :: Int } deriving
+newtype Ps = Ps { unPs :: Int } deriving
     ( Show, Read, Eq, Ord, Enum, Binary
     , Vector U.Vector, MVector U.MVector, U.Unbox )
 
@@ -37,9 +34,6 @@ newtype Ob = Ob { unOb :: Int } deriving
 newtype Lb = Lb { unLb :: Int } deriving
     ( Show, Read, Eq, Ord, Enum, Binary
     , Vector U.Vector, MVector U.MVector, U.Unbox )
-
--- | A potential.
-type Phi = Double
 
 -- | An input sequence (or a sentence).
 type Sent = V.Vector (U.Vector Ob)
@@ -56,14 +50,3 @@ data Trans = Trans
     { from  :: {-# UNPACK #-} !Lb
     , to    :: {-# UNPACK #-} !Lb }
     deriving (Show, Eq, Ord)
-
--- | A computation node.
-data Node = Node
-    { beg   :: {-# UNPACK #-} !Pos
-    , end   :: {-# UNPACK #-} !Pos
-    , val   :: {-# UNPACK #-} !Lb }
-    deriving (Show, Eq, Ord)
-
--- | A computation strategy.
-type Strat = Node -> Bool
-

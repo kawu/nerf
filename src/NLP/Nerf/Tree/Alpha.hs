@@ -9,7 +9,6 @@ module NLP.Nerf.Tree.Alpha
 ) where
 
 import Control.Applicative ((<$>))
-import Data.List (foldl')
 import qualified Data.Vector as V
 
 import NLP.Nerf.Tree.Types
