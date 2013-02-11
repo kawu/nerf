@@ -87,11 +87,11 @@ Dictionaries
 
 Nerf supports a list of NE-related dictionaries:
 
-  * [PoliMorf](\url{http://zil.ipipan.waw.pl/PoliMorf}),
-  * [NELexicon](\url{http://nlp.pwr.wroc.pl/en/tools-and-resources/nelexicon}),
-  * [Gazetteer for Polish Named Entities](\url{http://clip.ipipan.waw.pl/Gazetteer}),
-  * [PNET](\url{http://zil.ipipan.waw.pl/PNET}),
-  * [Prolexbase](\url{http://zil.ipipan.waw.pl/Prolexbase}).
+  * [PoliMorf](http://zil.ipipan.waw.pl/PoliMorf),
+  * [NELexicon](http://nlp.pwr.wroc.pl/en/tools-and-resources/nelexicon),
+  * [Gazetteer for Polish Named Entities](http://clip.ipipan.waw.pl/Gazetteer),
+  * [PNET](http://zil.ipipan.waw.pl/PNET),
+  * [Prolexbase](http://zil.ipipan.waw.pl/Prolexbase).
 
 To use the particular dictionary during NER you have to supply it as a
 command line argument during the training process, for example:
