@@ -179,7 +179,7 @@ exec Compare{..} = do
         putStrLn $ "# " ++ T.unpack neType
         putStrLn $ "true positive: "    ++ show (C.tp stats)
         putStrLn $ "false positive: "   ++ show (C.fp stats)
-        putStrLn $ "true negative: "    ++ show (C.tn stats)
+        -- putStrLn $ "true negative: "    ++ show (C.tn stats)
         putStrLn $ "false negative: "   ++ show (C.fn stats)
 
 readRaw :: FilePath -> IO [L.Text]
