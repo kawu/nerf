@@ -3,6 +3,7 @@
 
 module NLP.Nerf.Compare
 ( Stats (..)
+, (.+.)
 , compare
 ) where
 

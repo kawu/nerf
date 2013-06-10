@@ -13,7 +13,9 @@ import Data.Maybe (catMaybes)
 import Data.Binary (encodeFile, decodeFile)
 import Data.Text.Binary ()
 import Text.Named.Enamex (parseEnamex, showForest)
+import qualified Data.Map as M
 import qualified Numeric.SGD as SGD
+import qualified Data.Text as T
 import qualified Data.Text.Lazy as L
 import qualified Data.Text.Lazy.IO as L
 import qualified Data.DAWG.Static as D
@@ -23,6 +25,8 @@ import NLP.Nerf.Schema (defaultConf)
 import NLP.Nerf.Dict
     ( extractPoliMorf, extractPNEG, extractNELexicon, extractProlexbase
     , extractIntTriggers, extractExtTriggers, Dict )
+
+import           NLP.Nerf.Compare ((.+.))
 import qualified NLP.Nerf.Compare as C
 
 data Nerf
@@ -167,7 +171,16 @@ exec nerfArgs@Ox{..} = do
 exec Compare{..} = do
     x <- parseEnamex <$> L.readFile dataPath
     y <- parseEnamex <$> L.readFile dataPath'
-    print $ C.compare $ zip x y
+    let statMap = C.compare $ zip x y
+    forM_ (M.toList statMap) $ uncurry printStats
+    printStats "<all>" (foldl1 (.+.) $ M.elems statMap)
+  where
+    printStats neType stats = do
+        putStrLn $ "# " ++ T.unpack neType
+        putStrLn $ "true positive: "    ++ show (C.tp stats)
+        putStrLn $ "false positive: "   ++ show (C.fp stats)
+        putStrLn $ "true negative: "    ++ show (C.tn stats)
+        putStrLn $ "false negative: "   ++ show (C.fn stats)
 
 readRaw :: FilePath -> IO [L.Text]
 readRaw = fmap L.lines . L.readFile
