@@ -3,10 +3,11 @@
 
 module NLP.Nerf.Compare
 ( Stats (..)
+, compare
 ) where
 
 
-import           Prelude hiding (span)
+import           Prelude hiding (span, compare)
 import           Control.Applicative ((<$>))
 import           Control.Monad (forM)
 import qualified Control.Monad.State.Strict as ST
@@ -16,7 +17,6 @@ import qualified Data.Set as S
 import qualified Data.Map as M
 
 import qualified Data.Named.Tree as N
-import           NLP.Nerf.Types
 
 
 -- | Statistics.
@@ -28,10 +28,10 @@ data Stats = Stats
     } deriving (Show, Eq, Ord)
 
 
--- | A NE represented by its label and a span of corresponding words.
+-- | A NE represented by its label and a set of corresponding words.
 data Node a b = Node
     { label :: a
-    , span  :: S.Set b }
+    , _span :: S.Set b }
     deriving (Show, Eq, Ord)
 
 
@@ -44,10 +44,43 @@ x .+. y = Stats
     , tn    = tn x + tn y }
 
 
--- | Compare two NE-annotated NE forests.  The function assumes, that
--- both forests correspond to the same sentence.
-compare :: N.NeForest NE Word -> N.NeForest NE Word -> M.Map NE Stats
-compare = undefined
+-- | Compare two NE-annotated datasets.  The function assumes, that
+-- forest pairs correspond to the same sentences.
+compare
+    :: (Ord a, Ord b)
+    => [(N.NeForest a b, N.NeForest a b)]
+    -> M.Map a Stats
+compare xs = M.unionsWith (.+.)
+    [ cmpNodes (nodesF $ toIDs x) (nodesF $ toIDs y)
+    | (x, y) <- xs ]
+
+
+-- | Compare two sets of `Node`s.  The function is label-sensitive.
+cmpNodes
+    :: (Ord a, Ord b)
+    => S.Set (Node a b)
+    -> S.Set (Node a b)
+    -> M.Map a Stats
+cmpNodes x y = M.fromList
+    [ (key, mkStats (with key x) (with key y))
+    | key <- S.toList keys ]
+  where
+    keys    = S.union (getKeys x) (getKeys y)
+    getKeys = S.fromList . map label . S.toList
+    with k  = S.filter ((==k).label)
+
+
+-- | Compare two sets of `Node`s.  The function is label-insensitive.
+mkStats
+    :: (Ord a, Ord b)
+    => S.Set (Node a b)
+    -> S.Set (Node a b)
+    -> Stats
+mkStats x y = Stats
+    { fp    = S.size (S.difference y x)
+    , tp    = S.size (S.intersection x y)
+    , fn    = S.size (S.difference x y)
+    , tn    = 0 }
 
 
 -- | Replace words with position identifiers.

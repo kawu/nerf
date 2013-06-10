@@ -12,7 +12,7 @@ import Control.Monad (forM_, when)
 import Data.Maybe (catMaybes)
 import Data.Binary (encodeFile, decodeFile)
 import Data.Text.Binary ()
-import Text.Named.Enamex (showForest)
+import Text.Named.Enamex (parseEnamex, showForest)
 import qualified Numeric.SGD as SGD
 import qualified Data.Text.Lazy as L
 import qualified Data.Text.Lazy.IO as L
@@ -23,6 +23,7 @@ import NLP.Nerf.Schema (defaultConf)
 import NLP.Nerf.Dict
     ( extractPoliMorf, extractPNEG, extractNELexicon, extractProlexbase
     , extractIntTriggers, extractExtTriggers, Dict )
+import qualified NLP.Nerf.Compare as C
 
 data Nerf
   = Train
@@ -49,6 +50,9 @@ data Nerf
     , pneg          :: Maybe FilePath
     , neLex         :: Maybe FilePath
     , pnet          :: Maybe FilePath }
+  | Compare
+    { dataPath      :: FilePath
+    , dataPath'     :: FilePath }
   deriving (Data, Typeable, Show)
 
 trainMode :: Nerf
@@ -69,7 +73,7 @@ trainMode = Train
 
 nerMode :: Nerf
 nerMode = NER
-    { inNerf = def &= argPos 0 &= typ "NERF-FILE"
+    { inNerf   = def &= argPos 0 &= typ "NERF-FILE"
     , dataPath = def &= argPos 1 &= typ "INPUT" }
 
 oxMode :: Nerf
@@ -81,8 +85,13 @@ oxMode = Ox
     , neLex = def &= typFile &= help "Path to NELexicon"
     , pnet = def &= typFile &= help "Path to PNET" }
 
+cmpMode :: Nerf
+cmpMode = Compare
+    { dataPath  = def &= argPos 0 &= typ "REFERENCE"
+    , dataPath' = def &= argPos 1 &= typ "COMPARED" }
+
 argModes :: Mode (CmdArgs Nerf)
-argModes = cmdArgsMode $ modes [trainMode, nerMode, oxMode]
+argModes = cmdArgsMode $ modes [trainMode, nerMode, cmpMode, oxMode]
 
 data Resources = Resources
     { poliDict      :: Maybe Dict
@@ -115,7 +124,7 @@ extractDict msg f (Just x) = do
     dict <- f x
     let k = D.numStates dict
     k `seq` putStrLn $ " Done"
-    putStrLn $ "Number of automata states = " ++ show k
+    putStrLn $ "Number of automaton states = " ++ show k
     return (Just dict)
 extractDict _ _ Nothing = return Nothing
 
@@ -154,6 +163,11 @@ exec nerfArgs@Ox{..} = do
         (catMaybes [poliDict, prolexDict, pnegDict, neLexDict])
         intDict extDict
     tryOx cfg dataPath
+
+exec Compare{..} = do
+    x <- parseEnamex <$> L.readFile dataPath
+    y <- parseEnamex <$> L.readFile dataPath'
+    print $ C.compare $ zip x y
 
 readRaw :: FilePath -> IO [L.Text]
 readRaw = fmap L.lines . L.readFile
