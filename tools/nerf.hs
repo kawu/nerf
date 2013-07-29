@@ -12,11 +12,12 @@ import           System.Directory (getDirectoryContents)
 import           System.FilePath (replaceExtension, (</>))
 import           Control.Applicative ((<$>), (<*>))
 import           Control.Arrow (second)
-import           Control.Monad (forM_, when)
+import           Control.Monad (forM_)
 import           Data.Maybe (catMaybes)
 import           Data.Binary (encodeFile, decodeFile)
 import           Data.Text.Binary ()
 import           Text.Named.Enamex (parseEnamex, showForest)
+import qualified Data.Foldable as F
 import qualified Data.Map as M
 import qualified Numeric.SGD as SGD
 import qualified Data.Text as T
@@ -47,7 +48,7 @@ data Nerf
     , regVar        :: Double
     , gain0         :: Double
     , tau           :: Double
-    , outNerf       :: FilePath }
+    , outNerf       :: Maybe FilePath }
   | CV
     { dataDir       :: FilePath
     , poliMorf      :: Maybe FilePath
@@ -60,7 +61,7 @@ data Nerf
     , regVar        :: Double
     , gain0         :: Double
     , tau           :: Double
-    , outDir        :: FilePath }
+    , outDir        :: Maybe FilePath }
   | NER
     { dataPath      :: FilePath
     , inNerf        :: FilePath }
@@ -90,7 +91,7 @@ trainMode = Train
     , regVar = 10.0 &= help "Regularization variance"
     , gain0 = 1.0 &= help "Initial gain parameter"
     , tau = 5.0 &= help "Initial tau parameter"
-    , outNerf = def &= typFile &= help "Output Nerf file" }
+    , outNerf = def &= typFile &= help "Output model file" }
 
 cvMode :: Nerf
 cvMode = CV
@@ -105,7 +106,7 @@ cvMode = CV
     , regVar = 10.0 &= help "Regularization variance"
     , gain0 = 1.0 &= help "Initial gain parameter"
     , tau = 5.0 &= help "Initial tau parameter"
-    , outDir = def &= typFile &= help "Output Nerf directory" }
+    , outDir = def &= typFile &= help "Output model directory" }
 
 nerMode :: Nerf
 nerMode = NER
@@ -175,9 +176,9 @@ exec nerfArgs@Train{..} = do
         (catMaybes [poliDict, prolexDict, pnegDict, neLexDict])
         intDict extDict
     nerf <- train sgdArgs cfg trainPath evalPath
-    when (not . null $ outNerf) $ do
-        putStrLn $ "\nSaving model in " ++ outNerf ++ "..."
-        encodeFile outNerf nerf
+    flip F.traverse_ outNerf $ \path -> do
+        putStrLn $ "\nSaving model in " ++ path ++ "..."
+        encodeFile path nerf
   where
     sgdArgs = SGD.SgdArgs
         { SGD.batchSize = batchSize
@@ -196,9 +197,10 @@ exec nerfArgs@CV{..} = do
         putStrLn $ "Part: " ++ evalPath
         withParts trainPaths $ \trainPath -> do
             nerf <- train sgdArgs cfg trainPath (Just evalPath)
-            let outNerf = outDir </> replaceExtension evalPath ".bin"
-            putStrLn $ "\nSaving model in " ++ outNerf ++ "..."
-            encodeFile outNerf nerf
+            flip F.traverse_ outDir $ \dir -> do
+                let path = dir </> replaceExtension evalPath ".bin"
+                putStrLn $ "\nSaving model in " ++ path ++ "..."
+                encodeFile path nerf
   where
     sgdArgs = SGD.SgdArgs
         { SGD.batchSize = batchSize
