@@ -61,8 +61,9 @@ Text and label values should be escaped by prepending the `\` character before s
 NER input data
 --------------
 
-When the tool is used in the NER mode each sentence should be in a separate line.
-It's because Nerf currently doesn't perform any sentence level segmentation.
+When the tool is used in the NER mode, each sentence should be supplied in a
+separate line.  It's because Nerf currently doesn't perform any sentence-level
+segmentation.
 
 Training
 ========
