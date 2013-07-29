@@ -9,7 +9,7 @@ import           System.IO
     , stdout, BufferMode (..), hClose )
 import qualified System.IO.Temp as Temp
 import           System.Directory (getDirectoryContents)
-import           System.FilePath (replaceExtension, (</>))
+import           System.FilePath (takeBaseName, (</>), (<.>))
 import           Control.Applicative ((<$>), (<*>))
 import           Control.Arrow (second)
 import           Control.Monad (forM_)
@@ -194,11 +194,11 @@ exec nerfArgs@CV{..} = do
         intDict extDict
     parts <- getParts dataDir
     forM_ (enumDivs parts) $ \(evalPath, trainPaths) -> do
-        putStrLn $ "Part: " ++ evalPath
+        putStrLn $ "\nPart: " ++ evalPath
         withParts trainPaths $ \trainPath -> do
             nerf <- train sgdArgs cfg trainPath (Just evalPath)
             flip F.traverse_ outDir $ \dir -> do
-                let path = dir </> replaceExtension evalPath ".bin"
+                let path = dir </> takeBaseName evalPath <.> ".bin"
                 putStrLn $ "\nSaving model in " ++ path ++ "..."
                 encodeFile path nerf
   where
