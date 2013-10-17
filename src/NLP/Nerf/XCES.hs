@@ -2,6 +2,10 @@
 {-# LANGUAGE RecordWildCards #-}
 
 
+-- | Support for the XCES format.
+-- * Prety print.
+
+
 module NLP.Nerf.XCES
 ( nerXCES
 ) where
@@ -9,8 +13,8 @@ module NLP.Nerf.XCES
 
 import qualified Data.Text.Lazy as L
 import           Data.Char (isSpace)
-import           Text.HTML.TagSoup hiding (Tag, parseTags)
-import qualified Text.HTML.TagSoup as TagSoup
+import           Text.HTML.TagSoup ((~==))
+import qualified Text.HTML.TagSoup as S
 import           Text.XML.PolySoup hiding (Parser)
 
 import           Data.Named.Tree
@@ -20,7 +24,7 @@ import qualified NLP.Nerf as Nerf
 
 
 -- | An XML tag.
-type Tag = TagSoup.Tag L.Text
+type Tag = S.Tag L.Text
 
 
 -- | An XML parser.
@@ -30,7 +34,7 @@ type Parser a = XmlParser L.Text a
 -- | Group tags corresponding to individual sentences as right elements.
 chunk :: [Tag] -> [Either Tag [Tag]]
 chunk (x:xs)
-    | x == sentOpen =
+    | x ~== sentOpen =
         let (sent, rest) = takeSent xs
         in  Right (x:sent) : chunk rest
     | otherwise = Left x : chunk xs
@@ -62,12 +66,12 @@ type Sent = [Tok]
 
 -- | A sentence opening tag.
 sentOpen :: Tag
-sentOpen = TagOpen "chunk" [("type", "s")]
+sentOpen = S.TagOpen "chunk" [("type", "s")]
 
 
 -- | A sentence opening tag.
 sentClose :: Tag
-sentClose = TagClose "chunk"
+sentClose = S.TagClose "chunk"
 
 
 -- | XML sentence parser.
@@ -107,12 +111,12 @@ parseSent = tagsParseXml sentP
 
 -- | A sentence opening tag.
 neOpen :: NE -> Tag
-neOpen x = TagOpen "group" [("type", L.fromStrict x)]
+neOpen x = S.TagOpen "group" [("type", L.fromStrict x)]
 
 
 -- | A sentence opening tag.
 neClose :: Tag
-neClose = TagClose "group"
+neClose = S.TagClose "group"
 
 
 -- | Render an annotated sentence.
@@ -145,12 +149,12 @@ instance Tok.Word Tok where
 
 -- | A sentence opening tag.
 tokOpen :: Tag
-tokOpen = TagOpen "tok" []
+tokOpen = S.TagOpen "tok" []
 
 
 -- | A sentence opening tag.
 tokClose :: Tag
-tokClose = TagClose "tok"
+tokClose = S.TagClose "tok"
 
 
 -- | Assumption: orth is the first element of the token description.
@@ -162,8 +166,16 @@ tokP = tag "tok" ^> Tok
 
 
 -- | Render token.
+-- TODO: Split nps tag.
 renderTok :: Tok -> [Tag]
-renderTok Tok{..} = between tokOpen tokClose other
+renderTok Tok{..} =
+    nsTag ++ between tokOpen tokClose (orthTag ++ other)
+  where
+    orthTag = [S.TagOpen "orth" [], S.TagText orth, S.TagClose "orth"]
+    nsTag   = if nps
+--         then [S.TagOpen "ns" [], S.TagClose "ns"]
+        then [S.TagClose "ns"]
+        else []
 
 
 ---------------------------------------------------------------------
@@ -176,6 +188,70 @@ between :: a -> a -> [a] -> [a]
 between p q xs = p : xs ++ [q]
 
 
+-- -- | A sentence opening tag.
+-- lexOpen :: Tag
+-- lexOpen = S.TagOpen "lex" []
+-- 
+-- 
+-- -- | A sentence opening tag.
+-- lexClose :: Tag
+-- lexClose = S.TagClose "lex"
+
+
+-- | Add newlines etc.
+pretify :: [Tag] -> [Tag]
+pretify = go where
+    go (x:xs)
+        | x ~== lexOpen = x : go' xs
+        | otherwise     = x : nl : go xs
+    go []               = []
+    go' (x:xs)
+        | x == lexClose = x : nl : go xs
+        | otherwise     = x : go' xs
+    go' []              = []
+    nl = S.TagText "\n"
+
+
+-- -- | Add newlines etc.
+-- pretify :: [Tag] -> [Tag]
+-- pretify = go where
+--     go (x:xs)
+--         | x ~== lexOpen = x : go' xs
+--         | otherwise     = x : nl : go xs
+--     go []               = []
+--     go' (x:xs)
+--         | x == lexClose = x : nl : go xs
+--         | otherwise     = x : go' xs
+--     go' []              = []
+--     nl = S.TagText "\n"
+
+
+-- -- | Add newlines etc.
+-- pretify :: Int -> [Tag] -> [Tag]
+-- pretify n = go where
+-- 
+--     -- Outside of a sentence
+--     go (x:xs)
+--         | x == sentOpen     = x : nl : go' 0 xs
+--         | otherwise         = x : nl : go xs
+--     go []                   = []
+-- 
+--     -- Inside of a sentence
+--     go' k (x:xs)
+--         | x == sentClose    = x : nlIf k        ++ go xs
+--         | S.isTagOpen x     = x : nlIf (k+1)    ++ go' (k+1) xs
+--         | S.isTagClose x    = x : nlIf (k-1)    ++ go' (k-1) xs
+--         | otherwise         = x : nlIf k        ++ go' k xs
+--     go' _ []                = []
+-- 
+--     -- Newline tag
+--     nlIf k
+--         | k < n     = [nl]
+--         | otherwise = []
+--     nl = S.TagText "\n"
+        
+
+
 ---------------------------------------------------------------------
 -- Annotation
 ---------------------------------------------------------------------
@@ -184,20 +260,24 @@ between p q xs = p : xs ++ [q]
 -- | Annotate XCES (in a form of a tag list) with NEs.
 nerXCES :: Nerf.Nerf -> L.Text -> L.Text
 nerXCES nerf
-    = renderTags . unChunk
+    = S.renderTagsOptions opts
+    . pretify . unChunk
     . mapR
         ( renderNeForest
         . nerSent nerf
         . parseSent )
     . chunk . parseTags
-    where mapR = map . fmap
+  where
+    mapR = map . fmap
+    opts = S.renderOptions {S.optMinimize = const True}
 
 
 -- | Annotate XCES sentence with NEs.
 nerSent :: Nerf.Nerf -> Sent -> NeForest NE Tok
-nerSent nerf sent = Tok.moveNEs
-    (Nerf.ner nerf $ restoreOrigSent sent)
-    sent
+nerSent _ xs = [Node (Right x) [] | x <- xs]
+-- nerSent nerf sent = Tok.moveNEs
+--     (Nerf.ner nerf $ restoreOrigSent sent)
+--     sent
 
 
 -- | Restore original sentence.
