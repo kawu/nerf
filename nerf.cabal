@@ -29,21 +29,22 @@ library
     hs-source-dirs: src
 
     build-depends:
-        base >= 4 && < 5
+        base                >= 4        && < 5
       , containers
       , vector
       , text
       , binary
-      , text-binary >= 0.1 && < 0.2
-      , polysoup >= 0.1 && < 0.2
-      , crf-chain1 >= 0.2 && < 0.3
-      , data-named >= 0.5.1 && < 0.6
-      , monad-ox >= 0.2 && < 0.3
-      , sgd >= 0.2.1 && < 0.3
-      , polimorf >= 0.6.0 && < 0.7
-      , dawg >= 0.8.1 && < 0.9
-      , tokenize == 0.1.3
-      , mtl >= 2.1 && < 2.2
+      , text-binary         >= 0.1      && < 0.2
+      , tagsoup             >= 0.13     && < 0.14
+      , polysoup            >= 0.1      && < 0.2
+      , crf-chain1          >= 0.2      && < 0.3
+      , data-named          >= 0.5.1    && < 0.6
+      , monad-ox            >= 0.2      && < 0.3
+      , sgd                 >= 0.2.1    && < 0.3
+      , polimorf            >= 0.6.0    && < 0.7
+      , dawg                >= 0.8.1    && < 0.9
+      , tokenize            == 0.1.3
+      , mtl                 >= 2.1      && < 2.2
       , cmdargs
 
     exposed-modules:
@@ -58,6 +59,7 @@ library
       , NLP.Nerf.Dict.NELexicon
       , NLP.Nerf.Dict.Prolexbase
       , NLP.Nerf.Compare
+      , NLP.Nerf.XCES
 
     ghc-options: -Wall -O2
 
