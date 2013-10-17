@@ -13,6 +13,7 @@ recursively embedded NEs) by using the joined label tagging method which
 The extended IOB method also provides the inverse encoding function which is
 needed during the model training.
 
+
 Building Nerf
 =============
 
@@ -39,11 +40,13 @@ To install the latest development version from github just run
 
 from the `nerf` top level directory.
 
-Data format
-===========
+Data formats
+============
 
-Annotated data
---------------
+The only data encoding supported by Nerf is `UTF-8`.
+
+Training data
+-------------
 
 The current version of Nerf works with a simple data format in which:
 
@@ -61,9 +64,22 @@ Text and label values should be escaped by prepending the `\` character before s
 NER input data
 --------------
 
-When the tool is used in the NER mode, each sentence should be supplied in a
-separate line.  It's because Nerf currently doesn't perform any sentence-level
-segmentation.
+Below is a list of data formats supported within the NER mode.
+
+### Raw text
+
+Nerf can be used to annotate raw text with named entites.  The annotated data
+will be presented in the format which is also used for training and has already
+been described above.  Each sentence should be supplied in a separate line --
+currently, Nerf doesn't perform any sentence-level segmentation.
+
+### XCES format
+
+It is also possible to annotate data stored in the XCES format.
+The XCES input file has to satisfy the following property:
+
+  * The `<orth>` tag constitutes the first element of the `<tok>` contents.
+
 
 Training
 ========
@@ -99,12 +115,14 @@ command line argument during the training process, for example:
 
     nerf train train.nes --polimorf PoliMorf-0.6.1.tab
 
+
 Named entity recognition
 ========================
 
 To annotate the `input.txt` data file using the trained `model.bin` model, run: 
 
-    nerf ner model.bin input.txt
+    nerf ner model.bin < input.txt
 
-Anotated data will be printed to `stdout`.  Remember that each sentence in the
-input file should be in a separate line.
+Annotated data will be printed to `stdout`.  Data formats currently supported within
+the NER mode has been described above.  Run `nerf ner --help` to learn more about the
+additional NER arguments.

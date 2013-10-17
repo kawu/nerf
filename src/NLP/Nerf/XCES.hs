@@ -3,34 +3,20 @@
 
 
 module NLP.Nerf.XCES
-(
--- * Types
-  Sent
-, Tok (..)
+( nerXCES
 ) where
 
 
 import qualified Data.Text.Lazy as L
-import           Text.HTML.TagSoup hiding (Tag)
+import           Data.Char (isSpace)
+import           Text.HTML.TagSoup hiding (Tag, parseTags)
 import qualified Text.HTML.TagSoup as TagSoup
 import           Text.XML.PolySoup hiding (Parser)
 
 import           Data.Named.Tree
 import           NLP.Nerf.Types
 import qualified NLP.Nerf.Tokenize as Tok
-
-
--- We assume a rigid structure within the sentence <chunk type="s"> tags.
---
--- As a first step, we need to translate the "tag soup" into a
--- [Either Tag XML] list, where `Right` elements represent XML
--- tree fragments corresponding to individual sentences and `Left`
--- elements corresopnd to the other tags, which are not a part of
--- any sentence.
---
--- After that we can NER individual sentences (XML -> XML), parse them
--- (XML -> [Tag]), join all tags ([Either Tag [Tag] -> [Tag]) and render
--- the entire list of tags.  Voila!
+import qualified NLP.Nerf as Nerf
 
 
 -- | An XML tag.
@@ -48,6 +34,7 @@ chunk (x:xs)
         let (sent, rest) = takeSent xs
         in  Right (x:sent) : chunk rest
     | otherwise = Left x : chunk xs
+chunk [] = []
 
 
 -- | Take tags starting with a sentence.
@@ -56,6 +43,12 @@ takeSent = go [] where
     go acc (x:xs)
         | x == sentClose    = (reverse $ x:acc, xs)
         | otherwise         = go (x:acc) xs
+    go _ []                 = error "takeSent: expected sentence closing tag"
+
+
+-- | Remove division into chunks.
+unChunk :: [Either Tag [Tag]] -> [Tag]
+unChunk = concatMap $ either (:[]) id
 
 
 ---------------------------------------------------------------------
@@ -94,7 +87,7 @@ joinNps :: [Either Tok ()] -> [Tok]
 joinNps (Right _ : Left t : xs) = t { nps = True }  : joinNps xs
 joinNps (Left t : xs)           = t { nps = False } : joinNps xs
 joinNps []                      = []
-joinNps (x:xs)                  = joinNps xs    -- Exception: two <ns> tags
+joinNps (_:xs)                  = joinNps xs    -- Exception: two <ns> tags
 
 
 -- | Parse a list of tags into a sentence.
@@ -184,8 +177,33 @@ between p q xs = p : xs ++ [q]
 
 
 ---------------------------------------------------------------------
--- Move out
+-- Annotation
 ---------------------------------------------------------------------
 
 
--- annSent :: Nerf.Nerf -> Sent -> Sent
+-- | Annotate XCES (in a form of a tag list) with NEs.
+nerXCES :: Nerf.Nerf -> L.Text -> L.Text
+nerXCES nerf
+    = renderTags . unChunk
+    . mapR
+        ( renderNeForest
+        . nerSent nerf
+        . parseSent )
+    . chunk . parseTags
+    where mapR = map . fmap
+
+
+-- | Annotate XCES sentence with NEs.
+nerSent :: Nerf.Nerf -> Sent -> NeForest NE Tok
+nerSent nerf sent = Tok.moveNEs
+    (Nerf.ner nerf $ restoreOrigSent sent)
+    sent
+
+
+-- | Restore original sentence.
+restoreOrigSent :: Sent -> String
+restoreOrigSent 
+    = dropWhile isSpace
+    . concatMap tokStr
+  where
+    tokStr Tok{..} = (if nps then "" else " ") ++ (L.unpack orth)
