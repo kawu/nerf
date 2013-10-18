@@ -238,12 +238,11 @@ tokOrthP = maybe "" id <$> (tag "tok" ^> findIgnore (tag "orth" ^> text))
 
 -- | Render token.
 renderTok :: Tok -> [Tag]
-renderTok Tok{..} =
-    -- concatMap enumTree tagsBf ++ enumTree tagsIn
-    -- before ++ inside
-    inside
+renderTok Tok{..} = case before of
+    []  -> inside
+    _   -> intercalate [newline] [before, inside]
   where
-    -- before = concatMap enumTree $ intersperse (Node newline []) tagsBf
+    before = interMap enumTree tagsBf
     inside =
         let Node v xs = tagsIn
         in  between [v, newline] [newline, endFrom v]
@@ -263,17 +262,18 @@ type XmlTree = Tree Tag
 
 -- | Parse tags to an XML tree representation.
 xmlTreeP :: Parser XmlTree
--- xmlTreeP = trueXmlTreeP <|> (Node <$> cut getTag <*> pure [])
 xmlTreeP =
-    let textTag = fst <$> satisfyPred ((,) <$> getTag <*> isTagText)
-    in  trueXmlTreeP <|> (Node <$> textTag <*> pure [])
+    let commTag = satisfyPred ((,) <$> getTag <*> isTagComment)
+        textTag = satisfyPred ((,) <$> getTag <*> isTagText)
+        leafTag = fst <$> (textTag <|> commTag)
+    in  trueXmlTreeP <|> (Node <$> leafTag <*> pure [])
 
 
 trueXmlTreeP :: Parser XmlTree
 trueXmlTreeP = do
     (beg, name) <- satisfyPred ((,) <$> getTag <*> tagOpenName)
     subForest <- beg `seq` name `seq` many xmlTreeP
-    _ <- satisfyPred (getTag <* isTagCloseName name)
+    satisfyPred $ isTagCloseName name
     return $ Node beg subForest
 
 
@@ -318,33 +318,39 @@ interMap f = intercalate [newline] . map f
 -- | Annotate XCES (in a form of a tag list) with NEs.
 nerXCES :: Nerf.Nerf -> L.Text -> L.Text
 nerXCES nerf
-    = S.renderTags
+    = S.renderTagsOptions opts
     . unChunk
     . intersperse (Left newline)
     . mapR
         ( renderAnnSent
         . nerSent nerf
         . parseSent )
-    . chunk . parseTags
+    . chunk
+    . filter relevant
+    . S.parseTags
   where
+    opts = S.renderOptions {S.optMinimize = const True}
     mapR = map . fmap
-    -- opts = S.renderOptions {S.optMinimize = const True}
+    relevant (S.TagWarning _)       = False
+    relevant (S.TagPosition _ _)    = False
+    relevant (S.TagText x)          = not $ L.all isSpace x
+    relevant _                      = True
 
 
 -- | Annotate XCES sentence with NEs.
 nerSent :: Nerf.Nerf -> Sent [] -> Sent Ann
-nerSent _ s = s
-    { sentCon = Ann [Node (Right x) [] | x <- sentCon s] }
+nerSent nerf s@Sent{..} = s
+    { sentCon = Ann $ Tok.moveNEs
+        (Nerf.ner nerf $ restoreOrigSent sentCon)
+        sentCon }
 
--- -- nerSent nerf sent = Tok.moveNEs
--- --     (Nerf.ner nerf $ restoreOrigSent sent)
--- --     sent
--- 
--- 
--- -- -- | Restore original sentence.
--- -- restoreOrigSent :: Sent -> String
--- -- restoreOrigSent 
--- --     = dropWhile isSpace
--- --     . concatMap tokStr
--- --   where
--- --     tokStr Tok{..} = (if nps then "" else " ") ++ (L.unpack orth)
+
+-- | Restore original sentence.
+restoreOrigSent :: [Tok] -> String
+restoreOrigSent
+    = report
+    . dropWhile isSpace
+    . concatMap tokStr
+  where
+    tokStr Tok{..} = (if nps then "" else " ") ++ (L.unpack orth)
+    report x = trace x x
