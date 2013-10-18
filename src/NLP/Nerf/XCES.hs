@@ -3,7 +3,6 @@
 
 
 -- | Support for the XCES format.
--- * Prety print.
 
 
 module NLP.Nerf.XCES
@@ -23,12 +22,48 @@ import qualified NLP.Nerf.Tokenize as Tok
 import qualified NLP.Nerf as Nerf
 
 
+---------------------------------------------------------------------
+-- Core types
+---------------------------------------------------------------------
+
+
 -- | An XML tag.
 type Tag = S.Tag L.Text
 
 
 -- | An XML parser.
 type Parser a = XmlParser L.Text a
+
+
+---------------------------------------------------------------------
+-- XML tags
+---------------------------------------------------------------------
+
+
+-- | A sentence opening tag.
+sentOpen :: Tag
+sentOpen = S.TagOpen "chunk" [("type", "s")]
+
+
+-- | A sentence opening tag.
+sentClose :: Tag
+sentClose = S.TagClose "chunk"
+
+
+-- | A sentence opening tag.
+tokOpen :: Tag
+tokOpen = S.TagOpen "tok" []
+
+
+-- | A sentence opening tag.
+tokClose :: Tag
+tokClose = S.TagClose "tok"
+
+
+
+---------------------------------------------------------------------
+-- XML chunking
+---------------------------------------------------------------------
 
 
 -- | Group tags corresponding to individual sentences as right elements.
@@ -56,57 +91,86 @@ unChunk = concatMap $ either (:[]) id
 
 
 ---------------------------------------------------------------------
+-- XML sentence intermediate
+---------------------------------------------------------------------
+
+
+-- | Intermediate sentence representation.
+data SentI = SentI {
+    -- | Beginning tag.
+      sentBegI  :: Tag
+    -- | Sentence contents.
+    , sentConI  :: [(SegT, [Tag])] }
+
+
+-- | Type of a sentence sub-element.
+data SegT = TokT | NsT | OtherT
+
+
+-- | Identify type of a sub-element.
+-- TODO: It can be easily optimized, since we know that
+-- input tags already reprensent an XML tree.
+-- There's no need to use `tagsParseXml` here.
+idSegT :: [Tag] -> SegT
+idSegT = tagsParseXml $
+        TokT <$ cut (tag "tok")
+    <|> NsT  <$ cut (tag "ns")
+    <|> pure OtherT
+
+
+-- | XML intermediate sentence parser.
+sentIP :: Parser SentI
+sentIP =
+    begP >^> \x -> SentI x <$> many elemP
+  where
+    begP = tag "chunk" *> hasAttr "type" "s" *> getTag
+    elemP = (\x -> (idSegT x, x)) <$> elemTags
+
+
+---------------------------------------------------------------------
 -- XML sentence
 ---------------------------------------------------------------------
 
 
 -- | An XML sentence.
-type Sent = [Tok]
+data Sent t = Sent {
+      sentBeg   :: Tag
+    , sentCon   :: t Tok
+    , sentEnd   :: [Tag] }
 
 
--- | A sentence opening tag.
-sentOpen :: Tag
-sentOpen = S.TagOpen "chunk" [("type", "s")]
-
-
--- | A sentence opening tag.
-sentClose :: Tag
-sentClose = S.TagClose "chunk"
-
-
--- | XML sentence parser.
-sentP :: Parser Sent
-sentP = fmap joinNps
-    $ (tag "chunk" *> hasAttr "type" "s") />
-        (Left <$> tokP <|> Right <$> nsP)
-
-
--- | No-space parser.
-nsP :: Parser ()
-nsP = cut $ tag "ns"
-
-
--- | Join nps information with tokens.
-joinNps :: [Either Tok ()] -> [Tok]
-joinNps (Right _ : Left t : xs) = t { nps = True }  : joinNps xs
-joinNps (Left t : xs)           = t { nps = False } : joinNps xs
-joinNps []                      = []
-joinNps (_:xs)                  = joinNps xs    -- Exception: two <ns> tags
+-- | Translate sentence into its final representation.
+joinSent :: SentI -> Sent []
+joinSent SentI{..} =
+    uncurry (Sent sentBegI) (go [] [] False sentConI)
+  where
+    -- TODO: could we represent this function as a fold?
+    go acc res hasNs ((typ, tags) : xs) = case typ of
+        TokT ->
+            let tok = Tok
+                    { orth   = tagsParseXml tokOrthP tags
+                    , nps    = hasNs
+                    , tagsIn = tags
+                    , tagsBf = flatRev acc }
+            in  go [] (tok:res) False xs
+        NsT    -> go (tags:acc) res True xs
+        OtherT -> go (tags:acc) res hasNs xs
+    go acc res _ [] = (reverse res, flatRev acc)
+    flatRev = concat . reverse
 
 
 -- | Parse a list of tags into a sentence.
-parseSent :: [Tag] -> Sent
-parseSent = tagsParseXml sentP
-
-
--- -- | Render a sentence.
--- renderSent :: Sent -> [Tag]
--- renderSent ts = sentOpen : concatMap renderTok ts ++ [sentClose]
+parseSent :: [Tag] -> Sent []
+parseSent = joinSent . tagsParseXml sentIP
 
 
 ---------------------------------------------------------------------
 -- Annotated XML sentence
 ---------------------------------------------------------------------
+
+
+-- | List of a elements annotated with NEs.
+newtype Ann a = Ann { unAnn :: NeForest NE a }
 
 
 -- | A sentence opening tag.
@@ -120,8 +184,11 @@ neClose = S.TagClose "group"
 
 
 -- | Render an annotated sentence.
-renderNeForest :: NeForest NE Tok -> [Tag]
-renderNeForest = between sentOpen sentClose . concatMap renderNeTree
+renderAnnSent :: Sent Ann -> [Tag]
+renderAnnSent Sent{..}
+    = sentBeg
+    : concatMap renderNeTree (unAnn sentCon)
+    ++ sentEnd
 
 
 -- | Render an element of an annotated sentence.
@@ -136,46 +203,26 @@ renderNeTree (Node (Right t) _) = renderTok t
 ---------------------------------------------------------------------
 
 
--- | An XML sentence.
+-- | An XML token.
 data Tok = Tok
-    { orth  :: L.Text
-    , nps   :: Bool     -- ^ No preceding space
-    , other :: [Tag] }
+    { orth      :: L.Text   -- ^ Orthographic form
+    , nps       :: Bool     -- ^ No preceding space
+    , tagsIn    :: [Tag]    -- ^ Token tags 
+    , tagsBf    :: [Tag]    -- ^ Non-token tags before the token
+    }
 
 
 instance Tok.Word Tok where
     word = Tok.word . orth
 
 
--- | A sentence opening tag.
-tokOpen :: Tag
-tokOpen = S.TagOpen "tok" []
-
-
--- | A sentence opening tag.
-tokClose :: Tag
-tokClose = S.TagClose "tok"
-
-
--- | Assumption: orth is the first element of the token description.
-tokP :: Parser Tok
-tokP = tag "tok" ^> Tok
-    <$> (tag "orth" ^> text)
-    <*> pure False
-    <*> collTags
+tokOrthP :: Parser L.Text
+tokOrthP = maybe "" id <$> (tag "tok" ^> findIgnore (tag "orth" ^> text))
 
 
 -- | Render token.
--- TODO: Split nps tag.
 renderTok :: Tok -> [Tag]
-renderTok Tok{..} =
-    nsTag ++ between tokOpen tokClose (orthTag ++ other)
-  where
-    orthTag = [S.TagOpen "orth" [], S.TagText orth, S.TagClose "orth"]
-    nsTag   = if nps
---         then [S.TagOpen "ns" [], S.TagClose "ns"]
-        then [S.TagClose "ns"]
-        else []
+renderTok Tok{..} = tagsBf ++ tagsIn
 
 
 ---------------------------------------------------------------------
@@ -188,102 +235,40 @@ between :: a -> a -> [a] -> [a]
 between p q xs = p : xs ++ [q]
 
 
--- -- | A sentence opening tag.
--- lexOpen :: Tag
--- lexOpen = S.TagOpen "lex" []
--- 
--- 
--- -- | A sentence opening tag.
--- lexClose :: Tag
--- lexClose = S.TagClose "lex"
-
-
--- | Add newlines etc.
-pretify :: [Tag] -> [Tag]
-pretify = go where
-    go (x:xs)
-        | x ~== lexOpen = x : go' xs
-        | otherwise     = x : nl : go xs
-    go []               = []
-    go' (x:xs)
-        | x == lexClose = x : nl : go xs
-        | otherwise     = x : go' xs
-    go' []              = []
-    nl = S.TagText "\n"
-
-
--- -- | Add newlines etc.
--- pretify :: [Tag] -> [Tag]
--- pretify = go where
---     go (x:xs)
---         | x ~== lexOpen = x : go' xs
---         | otherwise     = x : nl : go xs
---     go []               = []
---     go' (x:xs)
---         | x == lexClose = x : nl : go xs
---         | otherwise     = x : go' xs
---     go' []              = []
---     nl = S.TagText "\n"
-
-
--- -- | Add newlines etc.
--- pretify :: Int -> [Tag] -> [Tag]
--- pretify n = go where
--- 
---     -- Outside of a sentence
---     go (x:xs)
---         | x == sentOpen     = x : nl : go' 0 xs
---         | otherwise         = x : nl : go xs
---     go []                   = []
--- 
---     -- Inside of a sentence
---     go' k (x:xs)
---         | x == sentClose    = x : nlIf k        ++ go xs
---         | S.isTagOpen x     = x : nlIf (k+1)    ++ go' (k+1) xs
---         | S.isTagClose x    = x : nlIf (k-1)    ++ go' (k-1) xs
---         | otherwise         = x : nlIf k        ++ go' k xs
---     go' _ []                = []
--- 
---     -- Newline tag
---     nlIf k
---         | k < n     = [nl]
---         | otherwise = []
---     nl = S.TagText "\n"
-        
-
-
 ---------------------------------------------------------------------
--- Annotation
+-- Annotating
 ---------------------------------------------------------------------
 
 
 -- | Annotate XCES (in a form of a tag list) with NEs.
 nerXCES :: Nerf.Nerf -> L.Text -> L.Text
 nerXCES nerf
-    = S.renderTagsOptions opts
-    . pretify . unChunk
+    = S.renderTags
+    . unChunk
     . mapR
-        ( renderNeForest
+        ( renderAnnSent
         . nerSent nerf
         . parseSent )
     . chunk . parseTags
   where
     mapR = map . fmap
-    opts = S.renderOptions {S.optMinimize = const True}
+    -- opts = S.renderOptions {S.optMinimize = const True}
 
 
 -- | Annotate XCES sentence with NEs.
-nerSent :: Nerf.Nerf -> Sent -> NeForest NE Tok
-nerSent _ xs = [Node (Right x) [] | x <- xs]
+nerSent :: Nerf.Nerf -> Sent [] -> Sent Ann
+nerSent _ s = s
+    { sentCon = Ann [Node (Right x) [] | x <- sentCon s] }
+
 -- nerSent nerf sent = Tok.moveNEs
 --     (Nerf.ner nerf $ restoreOrigSent sent)
 --     sent
 
 
--- | Restore original sentence.
-restoreOrigSent :: Sent -> String
-restoreOrigSent 
-    = dropWhile isSpace
-    . concatMap tokStr
-  where
-    tokStr Tok{..} = (if nps then "" else " ") ++ (L.unpack orth)
+-- -- | Restore original sentence.
+-- restoreOrigSent :: Sent -> String
+-- restoreOrigSent 
+--     = dropWhile isSpace
+--     . concatMap tokStr
+--   where
+--     tokStr Tok{..} = (if nps then "" else " ") ++ (L.unpack orth)
