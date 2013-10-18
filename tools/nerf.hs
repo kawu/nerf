@@ -6,8 +6,10 @@
 import           System.Console.CmdArgs
 import           System.IO
     ( Handle, hGetBuffering, hSetBuffering
-    , stdout, BufferMode (..), hClose )
+    , stdout, BufferMode (..), hClose, hFlush )
+import           System.IO.Unsafe (unsafePerformIO)
 import qualified System.IO.Temp as Temp
+import qualified Network as N
 import           System.Directory (getDirectoryContents)
 import           System.FilePath (takeBaseName, (</>), (<.>))
 import           Control.Applicative ((<$>), (<*>))
@@ -30,9 +32,29 @@ import           NLP.Nerf.Schema (defaultConf)
 import           NLP.Nerf.Dict
     ( extractPoliMorf, extractPNEG, extractNELexicon, extractProlexbase
     , extractIntTriggers, extractExtTriggers, Dict )
+import           NLP.Nerf.XCES as XCES
+import qualified NLP.Nerf.Server as S
 
 import           NLP.Nerf.Compare ((.+.))
 import qualified NLP.Nerf.Compare as C
+
+
+-- | Default port number.
+portDefault :: Int
+portDefault = 10090
+
+
+---------------------------------------
+-- Command line options
+---------------------------------------
+
+
+-- | Data formats. 
+data Format
+    = Text
+    | XCES
+    deriving (Data, Typeable, Show)
+
 
 data Nerf
   = Train
@@ -63,8 +85,15 @@ data Nerf
     , tau           :: Double
     , outDir        :: Maybe FilePath }
   | NER
-    { dataPath      :: FilePath
-    , inNerf        :: FilePath }
+    { inModel       :: FilePath
+    , format        :: Format }
+  | Server
+    { inModel       :: FilePath
+    , port          :: Int }
+  | Client
+    { format        :: Format
+    , host          :: String
+    , port          :: Int }
   | Ox
     { dataPath      :: FilePath
     , poliMorf      :: Maybe FilePath
@@ -76,6 +105,7 @@ data Nerf
     { dataPath      :: FilePath
     , dataPath'     :: FilePath }
   deriving (Data, Typeable, Show)
+
 
 trainMode :: Nerf
 trainMode = Train
@@ -93,6 +123,7 @@ trainMode = Train
     , tau = 5.0 &= help "Initial tau parameter"
     , outNerf = def &= typFile &= help "Output model file" }
 
+
 cvMode :: Nerf
 cvMode = CV
     { dataDir = def &= argPos 0 &= typ "DATA-DIR"
@@ -108,10 +139,29 @@ cvMode = CV
     , tau = 5.0 &= help "Initial tau parameter"
     , outDir = def &= typFile &= help "Output model directory" }
 
+
 nerMode :: Nerf
 nerMode = NER
-    { inNerf   = def &= argPos 0 &= typ "NERF-FILE"
-    , dataPath = def &= argPos 1 &= typ "INPUT" }
+    { inModel  = def &= argPos 0 &= typ "MODEL-FILE"
+    , format   = enum
+        [ Text &= help "Raw text"
+        , XCES &= help "XCES" ] }
+
+
+serverMode :: Nerf
+serverMode = Server
+    { inModel = def &= argPos 0 &= typ "MODEL-FILE"
+    , port    = portDefault &= help "Port number" }
+
+
+clientMode :: Nerf
+clientMode = Client
+    { port   = portDefault &= help "Port number"
+    , host   = "localhost" &= help "Server host name"
+    , format   = enum
+        [ Text &= help "Raw text"
+        , XCES &= help "XCES" ] }
+
 
 oxMode :: Nerf
 oxMode = Ox
@@ -122,13 +172,17 @@ oxMode = Ox
     , neLex = def &= typFile &= help "Path to NELexicon"
     , pnet = def &= typFile &= help "Path to PNET" }
 
+
 cmpMode :: Nerf
 cmpMode = Compare
     { dataPath  = def &= argPos 0 &= typ "REFERENCE"
     , dataPath' = def &= argPos 1 &= typ "COMPARED" }
 
+
 argModes :: Mode (CmdArgs Nerf)
-argModes = cmdArgsMode $ modes [trainMode, cvMode, nerMode, cmpMode, oxMode]
+argModes = cmdArgsMode $ modes
+    [trainMode, cvMode, nerMode, serverMode, clientMode, cmpMode, oxMode]
+
 
 data Resources = Resources
     { poliDict      :: Maybe Dict
@@ -137,6 +191,7 @@ data Resources = Resources
     , neLexDict     :: Maybe Dict
     , intDict       :: Maybe Dict
     , extDict       :: Maybe Dict }
+
 
 extract :: Nerf -> IO Resources
 extract nerf = withBuffering stdout NoBuffering $ Resources
@@ -147,6 +202,7 @@ extract nerf = withBuffering stdout NoBuffering $ Resources
     <*> extractDict "internal triggers" extractIntTriggers (pnet nerf)
     <*> extractDict "external triggers" extractExtTriggers (pnet nerf)
 
+
 withBuffering :: Handle -> BufferMode -> IO a -> IO a
 withBuffering h mode io = do
     oldMode <- hGetBuffering h
@@ -154,6 +210,7 @@ withBuffering h mode io = do
     x <- io
     hSetBuffering h oldMode
     return x
+
 
 extractDict :: String -> (a -> IO Dict) -> Maybe a -> IO (Maybe Dict)
 extractDict msg f (Just x) = do
@@ -165,10 +222,13 @@ extractDict msg f (Just x) = do
     return (Just dict)
 extractDict _ _ Nothing = return Nothing
 
+
 main :: IO ()
 main = exec =<< cmdArgsRun argModes
 
+
 exec :: Nerf -> IO ()
+
 
 exec nerfArgs@Train{..} = do
     Resources{..} <- extract nerfArgs
@@ -186,6 +246,7 @@ exec nerfArgs@Train{..} = do
         , SGD.iterNum = iterNum
         , SGD.gain0 = gain0
         , SGD.tau = tau }
+
 
 exec nerfArgs@CV{..} = do
     Resources{..} <- extract nerfArgs
@@ -209,12 +270,40 @@ exec nerfArgs@CV{..} = do
         , SGD.gain0 = gain0
         , SGD.tau = tau }
 
-exec NER{..} = do
-    nerf  <- decodeFile inNerf
-    input <- readRaw dataPath
-    forM_ input $ \sent -> do
-        let forest = ner nerf (L.unpack sent)
-        L.putStrLn (showForest forest)
+
+exec NER{..} = case format of
+    Text -> do
+        nerf <- decodeFile inModel
+        inp  <- L.lines <$> L.getContents
+        forM_ inp $ \sent -> do
+            let forest = ner nerf (L.unpack sent)
+            L.putStrLn (showForest forest)
+    XCES -> do
+        nerf <- decodeFile inModel
+        L.putStrLn . XCES.nerXCES (ner nerf) =<< L.getContents
+
+
+exec Server{..} = do
+    putStr "Loading model..." >> hFlush stdout
+    nerf <- decodeFile inModel
+    nerf `seq` putStrLn " done"
+    let portNum = N.PortNumber $ fromIntegral port
+    putStrLn $ "Listening on port " ++ show port
+    S.runNerfServer nerf portNum
+
+
+exec Client{..} = case format of
+    Text -> do
+        inp  <- L.lines <$> L.getContents
+        forM_ inp $ \sent -> do
+            forest <- S.ner host portNum $ L.unpack sent
+            L.putStrLn (showForest forest)
+    XCES -> do
+        let nerRemote = unsafePerformIO . S.ner host portNum
+        L.putStrLn . XCES.nerXCES nerRemote =<< L.getContents
+  where
+     portNum = N.PortNumber $ fromIntegral port
+
 
 exec nerfArgs@Ox{..} = do
     Resources{..} <- extract nerfArgs
@@ -222,6 +311,7 @@ exec nerfArgs@Ox{..} = do
         (catMaybes [poliDict, prolexDict, pnegDict, neLexDict])
         intDict extDict
     tryOx cfg dataPath
+
 
 exec Compare{..} = do
     x <- parseEnamex <$> L.readFile dataPath
@@ -237,8 +327,9 @@ exec Compare{..} = do
         -- putStrLn $ "true negative: "    ++ show (C.tn stats)
         putStrLn $ "false negative: "   ++ show (C.fn stats)
 
-readRaw :: FilePath -> IO [L.Text]
-readRaw = fmap L.lines . L.readFile
+
+-- readRaw :: FilePath -> IO [L.Text]
+-- readRaw = fmap L.lines . L.readFile
 
 
 ----------------------------------------
