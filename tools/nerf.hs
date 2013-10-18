@@ -6,8 +6,10 @@
 import           System.Console.CmdArgs
 import           System.IO
     ( Handle, hGetBuffering, hSetBuffering
-    , stdout, BufferMode (..), hClose )
+    , stdout, BufferMode (..), hClose, hFlush )
+import           System.IO.Unsafe (unsafePerformIO)
 import qualified System.IO.Temp as Temp
+import qualified Network as N
 import           System.Directory (getDirectoryContents)
 import           System.FilePath (takeBaseName, (</>), (<.>))
 import           Control.Applicative ((<$>), (<*>))
@@ -31,9 +33,15 @@ import           NLP.Nerf.Dict
     ( extractPoliMorf, extractPNEG, extractNELexicon, extractProlexbase
     , extractIntTriggers, extractExtTriggers, Dict )
 import           NLP.Nerf.XCES as XCES
+import qualified NLP.Nerf.Server as S
 
 import           NLP.Nerf.Compare ((.+.))
 import qualified NLP.Nerf.Compare as C
+
+
+-- | Default port number.
+portDefault :: Int
+portDefault = 10090
 
 
 ---------------------------------------
@@ -79,6 +87,13 @@ data Nerf
   | NER
     { inModel       :: FilePath
     , format        :: Format }
+  | Server
+    { inModel       :: FilePath
+    , port          :: Int }
+  | Client
+    { format        :: Format
+    , host          :: String
+    , port          :: Int }
   | Ox
     { dataPath      :: FilePath
     , poliMorf      :: Maybe FilePath
@@ -133,6 +148,21 @@ nerMode = NER
         , XCES &= help "XCES" ] }
 
 
+serverMode :: Nerf
+serverMode = Server
+    { inModel = def &= argPos 0 &= typ "MODEL-FILE"
+    , port    = portDefault &= help "Port number" }
+
+
+clientMode :: Nerf
+clientMode = Client
+    { port   = portDefault &= help "Port number"
+    , host   = "localhost" &= help "Server host name"
+    , format   = enum
+        [ Text &= help "Raw text"
+        , XCES &= help "XCES" ] }
+
+
 oxMode :: Nerf
 oxMode = Ox
     { dataPath = def &= argPos 0 &= typ "DATA-FILE"
@@ -150,7 +180,8 @@ cmpMode = Compare
 
 
 argModes :: Mode (CmdArgs Nerf)
-argModes = cmdArgsMode $ modes [trainMode, cvMode, nerMode, cmpMode, oxMode]
+argModes = cmdArgsMode $ modes
+    [trainMode, cvMode, nerMode, serverMode, clientMode, cmpMode, oxMode]
 
 
 data Resources = Resources
@@ -249,7 +280,29 @@ exec NER{..} = case format of
             L.putStrLn (showForest forest)
     XCES -> do
         nerf <- decodeFile inModel
-        L.putStrLn . XCES.nerXCES nerf =<< L.getContents
+        L.putStrLn . XCES.nerXCES (ner nerf) =<< L.getContents
+
+
+exec Server{..} = do
+    putStr "Loading model..." >> hFlush stdout
+    nerf <- decodeFile inModel
+    nerf `seq` putStrLn " done"
+    let portNum = N.PortNumber $ fromIntegral port
+    putStrLn $ "Listening on port " ++ show port
+    S.runNerfServer nerf portNum
+
+
+exec Client{..} = case format of
+    Text -> do
+        inp  <- L.lines <$> L.getContents
+        forM_ inp $ \sent -> do
+            forest <- S.ner host portNum $ L.unpack sent
+            L.putStrLn (showForest forest)
+    XCES -> do
+        let nerRemote = unsafePerformIO . S.ner host portNum
+        L.putStrLn . XCES.nerXCES nerRemote =<< L.getContents
+  where
+     portNum = N.PortNumber $ fromIntegral port
 
 
 exec nerfArgs@Ox{..} = do

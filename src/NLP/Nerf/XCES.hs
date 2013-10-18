@@ -20,9 +20,6 @@ import           Text.XML.PolySoup hiding (Parser)
 import           Data.Named.Tree
 import           NLP.Nerf.Types
 import qualified NLP.Nerf.Tokenize as Tok
-import qualified NLP.Nerf as Nerf
-
-import           Debug.Trace (trace)
 
 
 ---------------------------------------------------------------------
@@ -58,9 +55,9 @@ tokOpen :: Tag
 tokOpen = S.TagOpen "tok" []
 
 
--- | A sentence opening tag.
-tokClose :: Tag
-tokClose = S.TagClose "tok"
+-- -- | A sentence opening tag.
+-- tokClose :: Tag
+-- tokClose = S.TagClose "tok"
 
 
 -- | A sentence opening tag.
@@ -152,7 +149,7 @@ data Sent t = Sent {
 
 -- | Translate sentence into its final representation.
 joinSent :: SentI -> Sent []
-joinSent inp@SentI{..} =
+joinSent SentI{..} =
     uncurry (Sent sentBegI) (go [] [] False sentConI)
   where
     -- TODO: could we represent this function as a fold?
@@ -302,7 +299,7 @@ newline = S.TagText "\n"
 -- | Make closing tag from the opening tag.
 endFrom :: Tag -> Tag
 endFrom (S.TagOpen x _) = S.TagClose x
-endFrom t               = error "endFrom: not an opening tag"
+endFrom _               = error "endFrom: not an opening tag"
 
 
 -- | Map and intercalate with newlines.
@@ -311,19 +308,21 @@ interMap f = intercalate [newline] . map f
 
 
 ---------------------------------------------------------------------
--- Annotating
+-- NER
 ---------------------------------------------------------------------
 
 
--- | Annotate XCES (in a form of a tag list) with NEs.
-nerXCES :: Nerf.Nerf -> L.Text -> L.Text
-nerXCES nerf
+-- | Annotate XCES (in a form of a tag list) with NEs with respect
+-- to the given NER function.
+-- nerXCES :: Nerf.Nerf -> L.Text -> L.Text
+nerXCES :: (String -> NeForest NE Word) -> L.Text -> L.Text
+nerXCES nerFun
     = S.renderTagsOptions opts
     . unChunk
     . intersperse (Left newline)
     . mapR
         ( renderAnnSent
-        . nerSent nerf
+        . nerSent nerFun
         . parseSent )
     . chunk
     . filter relevant
@@ -338,19 +337,18 @@ nerXCES nerf
 
 
 -- | Annotate XCES sentence with NEs.
-nerSent :: Nerf.Nerf -> Sent [] -> Sent Ann
-nerSent nerf s@Sent{..} = s
+-- nerSent :: Nerf.Nerf -> Sent [] -> Sent Ann
+nerSent :: (String -> NeForest NE Word) -> Sent [] -> Sent Ann
+nerSent nerFun s@Sent{..} = s
     { sentCon = Ann $ Tok.moveNEs
-        (Nerf.ner nerf $ restoreOrigSent sentCon)
+        (nerFun $ restoreOrigSent sentCon)
         sentCon }
 
 
 -- | Restore original sentence.
 restoreOrigSent :: [Tok] -> String
 restoreOrigSent
-    = report
-    . dropWhile isSpace
+    = dropWhile isSpace
     . concatMap tokStr
   where
     tokStr Tok{..} = (if nps then "" else " ") ++ (L.unpack orth)
-    report x = trace x x
