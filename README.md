@@ -126,3 +126,41 @@ To annotate the `input.txt` data file using the trained `model.bin` model, run:
 Annotated data will be printed to `stdout`.  Data formats currently supported within
 the NER mode has been described above.  Run `nerf ner --help` to learn more about the
 additional NER arguments.
+
+
+Server
+======
+
+Nerf provides also a client/server mode.  It is handy when, for example,
+you need to annotate a large collection of small files.  Loading Nerf model
+from a disk takes considerable amount of time which makes the tagging method
+described above very slow in such a setting.
+
+To start the Nerf server, run:
+
+    nerf server model.bin
+
+You can supply a custom port number using a `--port` option.  For example,
+to run the server on the `10101` port, use the following command:
+
+    nerf server model.bin --port 10101
+
+To use the server in a multi-threaded environment, you need to specify the
+`-N` [RTS][ghc-rts] option.  A set of options which usually yield good
+server performance is presented in the following example:
+
+    nerf server model.bin +RTS -N -A4M -qg1 -I0
+
+Run `nerf server --help` to learn more about possible server-mode options.
+
+The client mode works just like the tagging mode.  The only difference is that,
+instead of supplying your client with a model, you need to specify the port number
+(in case you used a custom one when starting the server; otherwise, the default
+port number will be used).
+
+    nerf client --port 10101 < input.txt > output.nes
+
+Run `nerf client --help` to learn more about the possible client-mode options.
+
+
+[ghc-rts]: http://www.haskell.org/ghc/docs/latest/html/users_guide/runtime-control.html "GHC runtime system options"
