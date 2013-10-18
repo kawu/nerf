@@ -76,9 +76,6 @@ currently, Nerf doesn't perform any sentence-level segmentation.
 ### XCES format
 
 It is also possible to annotate data stored in the XCES format.
-The XCES input file has to satisfy the following property:
-
-  * The `<orth>` tag constitutes the first element of the `<tok>` contents.
 
 
 Training
