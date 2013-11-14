@@ -26,7 +26,7 @@ import Numeric.SGD (SgdArgs)
 import qualified Data.CRF.Chain1 as CRF
 
 import NLP.Nerf.Types
-import NLP.Nerf.Tokenize (tokenize, moveNEs)
+import NLP.Nerf.Tokenize (tokenize, sync)
 import NLP.Nerf.Schema (SchemaConf, Schema, fromConf, schematize)
 
 -- | A Nerf consists of the observation schema configuration and the CRF model.
@@ -50,7 +50,7 @@ flatten schema forest =
 -- | Tokenize sentence with the Nerf tokenizer.
 reTokenize :: N.NeForest NE Word -> N.NeForest NE Word
 reTokenize ft = 
-    moveNEs ft ((doTok . leaves) ft)
+    sync ft ((doTok . leaves) ft)
   where 
     doTok  = map T.pack . tokenize . intercalate " "  . map T.unpack
     leaves = concatMap $ foldMap (either (const []) (:[]))

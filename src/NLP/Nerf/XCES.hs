@@ -340,7 +340,7 @@ nerXCES nerFun
 -- nerSent :: Nerf.Nerf -> Sent [] -> Sent Ann
 nerSent :: (String -> NeForest NE Word) -> Sent [] -> Sent Ann
 nerSent nerFun s@Sent{..} = s
-    { sentCon = Ann $ Tok.moveNEs
+    { sentCon = Ann $ Tok.sync
         (nerFun $ restoreOrigSent sentCon)
         sentCon }
 
