@@ -20,6 +20,7 @@ import           Control.Arrow (second)
 import           Control.Monad ((>=>))
 import qualified Data.Char as Char
 import qualified Data.List as L
+import qualified Data.Map as M
 import qualified Data.Tree as T
 import qualified Data.Traversable as Tr
 import qualified Data.Text as Text
@@ -92,7 +93,23 @@ unGroupLeavesT (T.Node (Right vs) _)   =
 
 
 ---------------------------------------------------------------
--- Identifying ranges
+-- Depth
+---------------------------------------------------------------
+
+
+-- | Compute dephts of individual leaf values.
+depthMap :: Ord b => NeForest a b -> M.Map Int b
+depthMap =
+    goMany 0
+  where
+    goMany k = M.unions . map (go k)
+    go k t = case t of
+        T.Node (Left _) ts  -> goMany (k + 1) ts
+        T.Node (Right x) _  -> M.singleton k x
+
+
+---------------------------------------------------------------
+-- Range
 ---------------------------------------------------------------
 
 
@@ -113,15 +130,19 @@ rangedList :: Word a => [a] -> [(Range, a)]
 rangedList = snd . L.mapAccumL ranged 0
 
 
--- | Compute ranges of individual tokens.
-rangedForest :: Word b => NeForest a b -> NeForest a (Range, b)
+-- | Compute ranges of individual tokens.  Leaf values
+-- are not preserved.
+rangedForest :: Word b => NeForest a b -> NeForest a Range
 rangedForest = 
     snd . L.mapAccumL (Tr.mapAccumL f) 0
   where
     f acc (Left x)  = (acc, Left x)
     f acc (Right x) =
-        let (acc', y) = ranged acc x
+        let (acc', y) = second fst $ ranged acc x
         in  (acc', Right y)
+
+
+
         
 
 ---------------------------------------------------------------
@@ -129,33 +150,71 @@ rangedForest =
 ---------------------------------------------------------------
 
 
--- | Replace leaves in the NE forest with corresponding tokens.
-replaceToks
-    :: I.IntervalMap Int c
-    -> NeForest a (Range, b)
-    -> ( I.IntervalMap Int c
-       , NeForest a (Range, c) )
-replaceToks ivMap nes
-    = second unGroupLeaves
-    $ L.mapAccumL (Tr.mapAccumL replace) ivMap nes
+-- | Determine output segments corresponding to individual input ranges.
+correspToks :: I.IntervalMap Int a -> [Range] -> [[a]]
+correspToks ivMap =
+    snd . L.mapAccumL replace ivMap
   where
-    replace im (Left x) = (im, Left x)
-    replace im (Right (ran, _)) =
+    replace im ran =
         let rsXs = I.intersecting im ran
-            im'  = L.foldl' (flip I.delete) im (map fst rsXs)
-        in  (im', Right rsXs)
+            rs   = map fst rsXs
+            xs   = map snd rsXs
+            im'  = L.foldl' (flip I.delete) im rs
+        in  (im', xs)
 
 
--- | Lift the first range of a tree to the top.
-liftRange :: NeTree a (Range, b) -> (Range, NeTree a b)
-liftRange (T.Node (Left v) xs) =
-    (ran, T.Node (Left v) (map snd ys))
-  where
-    ys = map liftRange xs
-    ran = maybeHead $ map fst ys
-    maybeHead (x:_) = x
-    maybeHead []    = error "liftRange: invalid NE tree"
-liftRange (T.Node (Right (ran, v)) _) = (ran, T.Node (Right v) [])
+-- -- | Replace leaves in the NE forest with corresponding tokens.
+-- replaceToks
+--     :: I.IntervalMap Int c
+--     -> NeForest a (Range, b)
+--     -> ( I.IntervalMap Int c
+--        , NeForest a (Range, c) )
+-- replaceToks ivMap nes
+--     = second unGroupLeaves
+--     $ L.mapAccumL (Tr.mapAccumL replace) ivMap nes
+--   where
+--     replace im (Left x) = (im, Left x)
+--     replace im (Right (ran, _)) =
+--         let rsXs = I.intersecting im ran
+--             im'  = L.foldl' (flip I.delete) im (map fst rsXs)
+--         in  (im', Right rsXs)
+-- 
+-- 
+-- -- | Lift the first range of a tree to the top.
+-- liftRange :: NeTree a (Range, b) -> (Range, NeTree a b)
+-- liftRange (T.Node (Left v) xs) =
+--     (ran, T.Node (Left v) (map snd ys))
+--   where
+--     ys = map liftRange xs
+--     ran = maybeHead $ map fst ys
+--     maybeHead (x:_) = x
+--     maybeHead []    = error "liftRange: invalid NE tree"
+-- liftRange (T.Node (Right (ran, v)) _) = (ran, T.Node (Right v) [])
+-- 
+-- 
+-- -- | Synchronize the list of NE trees with the new tokenization.
+-- sync
+--     :: (Word b, Word c)
+--     => NeForest a b     -- ^ NE forest
+--     -> [c]              -- ^ New tokenization
+--     -> NeForest a c     -- ^ Resulting NE forest
+-- sync nes0 xs0
+--     = map snd . I.toList . I.fromList
+--     $ map (second mkLeaf) (I.toList ivMap')
+--     ++ map liftRange nes'
+--   where
+--     -- Interval map of the new tokenization
+--     ivMap = I.fromList $ rangedList xs0
+--     -- NE non-leaf trees with ranges
+--     nes = filter internal $ rangedForest nes0
+--     -- Replace tokens...
+--     (ivMap', nes') = replaceToks ivMap nes
+--     -- Is it an internal node?
+--     internal x = case T.rootLabel x of
+--         Left _  -> True
+--         Right _ -> False
+--     -- Make a leaf tree
+--     mkLeaf x = T.Node (Right x) []
 
 
 -- | Synchronize the list of NE trees with the new tokenization.
@@ -164,20 +223,14 @@ sync
     => NeForest a b     -- ^ NE forest
     -> [c]              -- ^ New tokenization
     -> NeForest a c     -- ^ Resulting NE forest
-sync nes0 xs0
-    = map snd . I.toList . I.fromList
-    $ map (second mkLeaf) (I.toList ivMap')
-    ++ map liftRange nes'
+sync nes0 xs0 =
   where
     -- Interval map of the new tokenization
     ivMap = I.fromList $ rangedList xs0
-    -- NE non-leaf trees with ranges
-    nes = filter internal $ rangedForest nes0
-    -- Replace tokens...
-    (ivMap', nes') = replaceToks ivMap nes
-    -- Is it an internal node?
-    internal x = case T.rootLabel x of
-        Left _  -> True
-        Right _ -> False
-    -- Make a leaf tree
-    mkLeaf x = T.Node (Right x) []
+    -- NE forest with ranges instead of leaf values
+    ranNes = rangedForest nes0
+    -- Determine segments corresponding to individual leaves
+    corrMap =
+        -- Leaf ranges in decreasing depth
+        let rs = map snd $ M.toDescList $ depthMap ranNes
+        in  M.fromList $ zip rs (correspToks ivMap rs)

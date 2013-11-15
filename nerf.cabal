@@ -1,5 +1,5 @@
 name:               nerf
-version:            0.5.1
+version:            0.5.2
 synopsis:           Nerf, the named entity recognition tool based on linear-chain CRFs
 description:
     The package provides the named entity recognition (NER) tool divided into a
