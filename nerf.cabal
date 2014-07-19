@@ -1,5 +1,5 @@
 name:               nerf
-version:            0.5.2
+version:            0.6
 synopsis:           Nerf, the named entity recognition tool based on linear-chain CRFs
 description:
     The package provides the named entity recognition (NER) tool divided into a
@@ -37,7 +37,8 @@ library
       , bytestring          >= 0.9      && < 0.11
       , text-binary         >= 0.1      && < 0.2
       , tagsoup             >= 0.13     && < 0.14
-      , polysoup            >= 0.2      && < 0.3
+      -- , polysoup            >= 0.2      && < 0.3
+      , polysoup            >= 0.6      && < 0.7
       , crf-chain1          >= 0.2      && < 0.3
       , data-named          >= 0.5.1    && < 0.6
       , monad-ox            >= 0.2      && < 0.3
@@ -64,6 +65,7 @@ library
       , NLP.Nerf.Compare
       , NLP.Nerf.Server
       , NLP.Nerf.XCES
+      , NLP.Nerf.XCES2
 
     ghc-options: -Wall -O2
 
@@ -71,11 +73,11 @@ source-repository head
     type: git
     location: https://github.com/kawu/nerf.git
 
-executable nerf
-  hs-source-dirs: src, tools
-  build-depends:
-    filepath            >= 1.3      && < 1.4,
-    directory           >= 1.1      && < 1.3,
-    temporary           >= 1.1      && < 1.2
-  main-is: nerf.hs
-  ghc-options: -Wall -O2 -threaded -rtsopts
+-- executable nerf
+--   hs-source-dirs: src, tools
+--   build-depends:
+--     filepath            >= 1.3      && < 1.4,
+--     directory           >= 1.1      && < 1.3,
+--     temporary           >= 1.1      && < 1.2
+--   main-is: nerf.hs
+--   ghc-options: -Wall -O2 -threaded -rtsopts
