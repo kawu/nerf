@@ -67,6 +67,7 @@ library
       , NLP.Nerf.Server
       , NLP.Nerf.XCES
       , NLP.Nerf.XCES2
+      , NLP.Nerf.TEINKJP
 
     ghc-options: -Wall -O2
 
