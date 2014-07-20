@@ -243,7 +243,9 @@ getTxt x = named x `joinR` first (node text)
 
 -- | Convert XCES into its XML representation. 
 showXCES :: (IsString s, StringLike s) => XCES s -> s
-showXCES = TS.renderTags . renderTree . xcesToXML
+showXCES =
+    let opts = TS.renderOptions { TS.optMinimize = const True }
+    in  TS.renderTagsOptions opts . renderTree . xcesToXML
 
 
 -- | Convert XCES to XML tree.
@@ -339,22 +341,25 @@ sperse y [] = [y]
 -------------------------------------------------
 
 
--- | Construct `Root t` from the NKJP sentence representation.
+-- | Construct `Root t` from a NKJP sentence.
 -- TODO: include <ns> markers.
 fromNKJP
     :: NeForest (NKJP.NE.NE L.Text) (NKJP.MX.Seg L.Text)
     -> NeForest (NE L.Text) (Maybe (Tok L.Text))
 fromNKJP =
-    mapForest $ onEither f g
+    concatForestLeaves . mapForest (onEither f g)
   where
     f NKJP.NE.NE{..} = NE 
         { neType    = neType
         , subType   = subType
         , derivType = NKJP.NE.derivType <$> derived }
-    g NKJP.MX.Seg{..} = Just $ Tok
-        { orth  = orth
-        , lexs  = concatMap (fromLex $ snd choice) lexs }
-    -- interp is of the form "base:ctag:msd1:msd2:..."
+    g NKJP.MX.Seg{..} = if nps
+        then [Nothing, Just tok]
+        else [Just tok]
+      where
+        tok = Tok
+            { orth  = orth
+            , lexs  = concatMap (fromLex $ snd choice) lexs }
     fromLex ch NKJP.MX.Lex{..} =
         [ Lex { base = base              , ctag = ctag'
               , disamb = chBase == base && chCtag == ctag' }
