@@ -38,6 +38,17 @@ import qualified NLP.Nerf.Server as S
 import           NLP.Nerf.Compare ((.+.))
 import qualified NLP.Nerf.Compare as C
 
+-- For the NKJP2XCES mode:
+import qualified NLP.Nerf.XCES2 as XCES2
+import qualified Data.Named.Tree as NETree
+import qualified Text.NKJP.Named as NKJP.NE
+import qualified Text.NKJP.Morphosyntax as NKJP.MX
+
+
+---------------------------------------
+-- Configuration
+---------------------------------------
+
 
 -- | Default port number.
 portDefault :: Int
@@ -104,6 +115,8 @@ data Nerf
   | Compare
     { dataPath      :: FilePath
     , dataPath'     :: FilePath }
+  | NKJP2XCES
+    { nkjpPath      :: FilePath }
   deriving (Data, Typeable, Show)
 
 
@@ -179,9 +192,15 @@ cmpMode = Compare
     , dataPath' = def &= argPos 1 &= typ "COMPARED" }
 
 
+nkjp2xcesMode :: Nerf
+nkjp2xcesMode = NKJP2XCES
+    { nkjpPath  = def &= argPos 0 &= typ "NKJP.tar.bz2" }
+
+
 argModes :: Mode (CmdArgs Nerf)
 argModes = cmdArgsMode $ modes
-    [trainMode, cvMode, nerMode, serverMode, clientMode, cmpMode, oxMode]
+    [ trainMode, cvMode, nerMode, serverMode, clientMode
+    , cmpMode, oxMode, nkjp2xcesMode ]
 
 
 data Resources = Resources
@@ -326,6 +345,12 @@ exec Compare{..} = do
         putStrLn $ "false positive: "   ++ show (C.fp stats)
         -- putStrLn $ "true negative: "    ++ show (C.tn stats)
         putStrLn $ "false negative: "   ++ show (C.fn stats)
+
+
+exec NKJP2XCES{..} = do
+    nkjp <- NKJP.NE.readTrees nkjpPath
+    let xces = map (map XCES2.fromNKJP) nkjp
+    L.putStrLn $ XCES2.showXCES xces
 
 
 -- readRaw :: FilePath -> IO [L.Text]

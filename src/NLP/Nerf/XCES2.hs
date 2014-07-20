@@ -24,11 +24,15 @@ module NLP.Nerf.XCES2
 
 -- * Printing
 , showXCES
+
+-- * NKJP
+, fromNKJP
 ) where
 
 
 import           Control.Applicative
 -- import           Control.Monad (void)
+import           Control.Arrow (second)
 import           Data.String (IsString)
 import           Data.List (intersperse)
 import qualified Data.Foldable as F
@@ -46,7 +50,9 @@ import qualified Text.HTML.TagSoup as TS
 import           Text.XML.PolySoup hiding (P, Q)
 import qualified Text.XML.PolySoup as P
 
--- import qualified Text.NKJP.Named as NKJP
+-- For the sake of `fromNKJP` function.
+import qualified Text.NKJP.Named as NKJP.NE
+import qualified Text.NKJP.Morphosyntax as NKJP.MX
 
 
 ---------------------------------------------------------------------
@@ -66,6 +72,8 @@ type Para t = [Sent t]
 -- | A sentence is a forest of `NE`s (kept in internal nodes)
 -- with tokens (or no-space markers) stored in leaves.
 -- No-space markers are represented with `Nothing` values.
+--
+-- `Sent t` is equal to `NeForest (NE t) (Maybe (Tok t))` as well.
 type Sent t = [Root t]
 
 
@@ -123,6 +131,31 @@ data Lex t = Lex
     -- | Was it chosen while disambiguating?
     , disamb    :: Bool }
     deriving (Show, Functor)
+
+
+---------------------------------------------------------------------
+-- Configuration (attributes not present in standard XCSE format)
+---------------------------------------------------------------------
+
+
+-- | NE tag name.
+neS :: IsString s => s
+neS = "group"
+
+
+-- | NE type.
+neTypeS :: IsString s => s
+neTypeS = "type"
+
+
+-- | NE subtype.
+neSubTypeS :: IsString s => s
+neSubTypeS = "subtype"
+
+
+-- | NE derivation type.
+neDerivTypeS :: IsString s => s
+neDerivTypeS = "derivtype"
 
 
 -------------------------------------------------
@@ -183,10 +216,10 @@ neTreeQ =
     mkNode <$> (neQ </> nodeQ)
   where
     mkNode (ne, xs) = Node (Left ne) xs
-    neQ = named "ne" *> ( NE
-        <$> attr "type"
-        <*> optional (attr "subtype")
-        <*> optional (attr "derivtype") )
+    neQ = named neS *> ( NE
+        <$> attr neTypeS
+        <*> optional (attr neSubTypeS)
+        <*> optional (attr neDerivTypeS) )
 
 
 -------------------------------------------------
@@ -202,6 +235,10 @@ getTxt x = named x `joinR` first (node text)
 -------------------------------------------------
 -- Printing
 -------------------------------------------------
+
+
+-- TODO: add a more generic solution for the
+-- `sperse breakLine` trick.
 
 
 -- | Convert XCES into its XML representation. 
@@ -245,10 +282,10 @@ rootToXML (Node r xs) = case r of
     Left NE{..} -> Node neTag
         (sperse breakLine $ map rootToXML xs)
       where
-        neTag = TagOpen "ne" $
-            [ ("type", neType) ] ++
-            mbTag "subtype" subType ++
-            mbTag "derivtype" derivType
+        neTag = TagOpen neS $
+            [ (neTypeS, neType) ] ++
+            mbTag neSubTypeS subType ++
+            mbTag neDerivTypeS derivType
         mbTag x y = case y of
             Nothing -> []
             Just z  -> [(x, z)]
@@ -266,7 +303,7 @@ tokToXML Tok{..} = mkNode "token" []
 lexToXML :: IsString s => Lex s -> Tree (Tag s)
 lexToXML Lex{..} = mkNode "lex" atts
     [ mkNode "base" [] [mkText base]
-    , mkNode "ctag" [] [mkText base] ]
+    , mkNode "ctag" [] [mkText ctag] ]
   where
     atts = if disamb
         then [("disamb", "1")]
@@ -295,3 +332,33 @@ breakLine = mkText "\n"
 sperse :: a -> [a] -> [a]
 sperse y (x:xs) = y : x : sperse y xs 
 sperse y [] = [y]
+
+
+-------------------------------------------------
+-- NKJP
+-------------------------------------------------
+
+
+-- | Construct `Root t` from the NKJP sentence representation.
+-- TODO: include <ns> markers.
+fromNKJP
+    :: NeForest (NKJP.NE.NE L.Text) (NKJP.MX.Seg L.Text)
+    -> NeForest (NE L.Text) (Maybe (Tok L.Text))
+fromNKJP =
+    mapForest $ onEither f g
+  where
+    f NKJP.NE.NE{..} = NE 
+        { neType    = neType
+        , subType   = subType
+        , derivType = NKJP.NE.derivType <$> derived }
+    g NKJP.MX.Seg{..} = Just $ Tok
+        { orth  = orth
+        , lexs  = concatMap (fromLex $ snd choice) lexs }
+    -- interp is of the form "base:ctag:msd1:msd2:..."
+    fromLex ch NKJP.MX.Lex{..} =
+        [ Lex { base = base              , ctag = ctag'
+              , disamb = chBase == base && chCtag == ctag' }
+        | (_, msd) <- msds
+        , let msd' = if L.null msd then msd else L.cons ':' msd
+        , let ctag' = L.append ctag msd' ]
+        where (chBase, chCtag) = second L.tail $ L.break (==':') ch
