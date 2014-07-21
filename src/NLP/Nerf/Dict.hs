@@ -12,13 +12,13 @@ module NLP.Nerf.Dict
 , module NLP.Nerf.Dict.Base
 ) where
 
-import Control.Applicative ((<$>), (<*>))
+import           Control.Applicative ((<$>), (<*>))
 import qualified Data.PoliMorf as Poli
 
-import NLP.Nerf.Dict.Base
-import NLP.Nerf.Dict.PNEG (readPNEG)
-import NLP.Nerf.Dict.NELexicon (readNELexicon)
-import NLP.Nerf.Dict.Prolexbase (readProlexbase)
+import           NLP.Nerf.Dict.Base
+import           NLP.Nerf.Dict.PNEG (readPNEG)
+import           NLP.Nerf.Dict.NELexicon (readNELexicon)
+import           NLP.Nerf.Dict.Prolexbase (readProlexbase)
 import qualified NLP.Nerf.Dict.PNET as PNET
 
 -- | Is it a single word entry?

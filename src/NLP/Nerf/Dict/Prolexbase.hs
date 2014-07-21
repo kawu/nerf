@@ -9,7 +9,7 @@ module NLP.Nerf.Dict.Prolexbase
 import qualified Data.Text.Lazy as L
 import qualified Data.Text.Lazy.IO as L
 
-import NLP.Nerf.Dict.Base
+import           NLP.Nerf.Dict.Base
 
 -- | Parse dictionary into a list of entries.
 parseProlexbase :: L.Text -> [Entry]

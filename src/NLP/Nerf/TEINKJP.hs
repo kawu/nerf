@@ -9,8 +9,8 @@ module NLP.Nerf.TEINKJP
 ( nerPara
 , nerSent
 
--- * Dummy
-, dummyNER
+-- -- * Dummy
+-- , dummyNER
 
 -- * Printing
 , showTEI
@@ -41,12 +41,12 @@ import           NLP.Nerf.Types
 -----------------------------------------------------------
 
 
--- | Dummy NER function.
-dummyNER :: [X.Seg t] -> NeForest NE (X.Seg t)
--- dummyNER = map $ flip Node [] . Right
-dummyNER xs = (:[]) $ Node (Left "placeName")
-    [ Node (Left "innerName")
-        $ map (flip Node [] . Right) xs ]
+-- -- | Dummy NER function.
+-- dummyNER :: [X.Seg t] -> NeForest NE (X.Seg t)
+-- -- dummyNER = map $ flip Node [] . Right
+-- dummyNER xs = (:[]) $ Node (Left "placeName")
+--     [ Node (Left "innerName")
+--         $ map (flip Node [] . Right) xs ]
 
 
 -----------------------------------------------------------
@@ -57,9 +57,9 @@ dummyNER xs = (:[]) $ Node (Left "placeName")
 -- | Tag a paragraph in the TEI NKJP morphosyntax format.
 nerPara
     :: ( [X.Seg L.Text]
-      -> NeForest NE (X.Seg L.Text)) -- ^ NER function
-    -> X.Para L.Text                             -- ^ TEI NKJP morphosyntax paragraph
-    -> N.Para L.Text                             -- ^ TEI NKJP "named" paragraph
+      -> NeForest NE (X.Seg L.Text))    -- ^ NER function
+    -> X.Para L.Text                    -- ^ TEI NKJP morphosyntax paragraph
+    -> N.Para L.Text                    -- ^ TEI NKJP "named" paragraph
 nerPara f X.Para{..} = N.Para
     { paraID = paraID   -- TODO: set new identifier to the NE paragraph. 
     , sentences = map (nerSent f) sentences }
@@ -67,9 +67,10 @@ nerPara f X.Para{..} = N.Para
 
 -- | Tag a sentence in the TEI NKJP morphosyntax format.
 nerSent
-    :: ([X.Seg L.Text] -> NeForest NE (X.Seg L.Text)) -- ^ NER function
-    -> X.Sent L.Text                             -- ^ TEI NKJP morphosyntax sentence
-    -> N.Sent L.Text                             -- ^ TEI NKJP "named" sentence
+    :: ( [X.Seg L.Text]
+       -> NeForest NE (X.Seg L.Text))   -- ^ NER function
+    -> X.Sent L.Text                    -- ^ TEI NKJP morphosyntax sentence
+    -> N.Sent L.Text                    -- ^ TEI NKJP "named" sentence
 nerSent f X.Sent{..} = N.Sent
     { sentID = sentID   -- TODO: set new identifier
     , names = fromForest $ f segments  }

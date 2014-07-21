@@ -31,7 +31,7 @@ import Data.Text.Binary ()
 import qualified Data.Text as T
 import qualified Data.Set as S
 import qualified Data.DAWG.Static as D
-import qualified Data.DAWG.Trans.Vector as D
+-- import qualified Data.DAWG.Trans.Vector as D
 
 -- | A type of named entity.
 type NeType = T.Text
@@ -56,7 +56,8 @@ type Label = T.Text
 -- with multiple labels.  The map is represented using the directed acyclic
 -- word graph.
 -- type Dict = D.DAWG (S.Set Label)
-type DAWG = D.DAWG D.Trans Char ()
+-- type DAWG = D.DAWG D.Trans Char ()
+type DAWG = D.DAWG Char ()
 type Dict = DAWG (S.Set Label)
 
 -- | Construct dictionary from the list of form/label pairs.
@@ -86,12 +87,12 @@ loadDict = decodeFile
 merge :: [Dict] -> Dict
 merge = unionsWith S.union
 
--- | Replacement implementation of unionsWith while there is
+-- | Replacement implementation of unionsWith since there is
 -- no such function in dawg library. 
 unionsWith :: Ord a => (a -> a -> a) -> [DAWG a] -> DAWG a
 unionsWith f = foldl (unionWith f) D.empty
 
--- | Replacement implementation of unionWith while there is
+-- | Replacement implementation of unionWith since there is
 -- no such function in dawg library. 
 unionWith :: Ord a => (a -> a -> a) -> DAWG a -> DAWG a -> DAWG a
 unionWith f d d' = D.fromListWith f (D.assocs d ++ D.assocs d')
