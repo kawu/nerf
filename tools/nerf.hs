@@ -27,13 +27,13 @@ import qualified Data.Text.Lazy as L
 import qualified Data.Text.Lazy.IO as L
 import qualified Data.DAWG.Static as D
 
-import           NLP.Nerf (train, ner, tryOx)
+import           NLP.Nerf (train, train', ner, tryOx)
 import           NLP.Nerf.Schema (defaultConf)
 import           NLP.Nerf.Dict
     ( extractPoliMorf, extractPNEG, extractNELexicon, extractProlexbase
     , extractIntTriggers, extractExtTriggers, Dict )
-import           NLP.Nerf.XCES as XCES
-import qualified NLP.Nerf.Server as S
+-- import           NLP.Nerf.XCES as XCES
+-- import qualified NLP.Nerf.Server as S
 
 import           NLP.Nerf.Compare ((.+.))
 import qualified NLP.Nerf.Compare as C
@@ -71,6 +71,7 @@ data Nerf
   = Train
     { trainPath     :: FilePath
     , evalPath      :: Maybe FilePath
+    , format        :: Format
     , poliMorf      :: Maybe FilePath
     , prolex        :: Maybe FilePath
     , pneg          :: Maybe FilePath
@@ -98,13 +99,13 @@ data Nerf
   | NER
     { inModel       :: FilePath
     , format        :: Format }
-  | Server
-    { inModel       :: FilePath
-    , port          :: Int }
-  | Client
-    { format        :: Format
-    , host          :: String
-    , port          :: Int }
+--   | Server
+--     { inModel       :: FilePath
+--     , port          :: Int }
+--   | Client
+--     { format        :: Format
+--     , host          :: String
+--     , port          :: Int }
   | Ox
     { dataPath      :: FilePath
     , poliMorf      :: Maybe FilePath
@@ -124,6 +125,9 @@ trainMode :: Nerf
 trainMode = Train
     { trainPath = def &= argPos 0 &= typ "TRAIN-FILE"
     , evalPath = def &= typFile &= help "Evaluation file"
+    , format = enum
+        [ Text &= help "Enamex"
+        , XCES &= help "XCES" ]
     , poliMorf = def &= typFile &= help "Path to PoliMorf"
     , prolex = def &= typFile &= help "Path to Prolexbase"
     , pneg = def &= typFile &= help "Path to PNEG-LMF"
@@ -161,19 +165,19 @@ nerMode = NER
         , XCES &= help "XCES" ] }
 
 
-serverMode :: Nerf
-serverMode = Server
-    { inModel = def &= argPos 0 &= typ "MODEL-FILE"
-    , port    = portDefault &= help "Port number" }
-
-
-clientMode :: Nerf
-clientMode = Client
-    { port   = portDefault &= help "Port number"
-    , host   = "localhost" &= help "Server host name"
-    , format   = enum
-        [ Text &= help "Raw text"
-        , XCES &= help "XCES" ] }
+-- serverMode :: Nerf
+-- serverMode = Server
+--     { inModel = def &= argPos 0 &= typ "MODEL-FILE"
+--     , port    = portDefault &= help "Port number" }
+-- 
+-- 
+-- clientMode :: Nerf
+-- clientMode = Client
+--     { port   = portDefault &= help "Port number"
+--     , host   = "localhost" &= help "Server host name"
+--     , format   = enum
+--         [ Text &= help "Raw text"
+--         , XCES &= help "XCES" ] }
 
 
 oxMode :: Nerf
@@ -199,7 +203,8 @@ nkjp2xcesMode = NKJP2XCES
 
 argModes :: Mode (CmdArgs Nerf)
 argModes = cmdArgsMode $ modes
-    [ trainMode, cvMode, nerMode, serverMode, clientMode
+    -- [ trainMode, cvMode, nerMode, serverMode, clientMode
+    [ trainMode, cvMode, nerMode
     , cmpMode, oxMode, nkjp2xcesMode ]
 
 
@@ -254,7 +259,10 @@ exec nerfArgs@Train{..} = do
     cfg <- defaultConf
         (catMaybes [poliDict, prolexDict, pnegDict, neLexDict])
         intDict extDict
-    nerf <- train sgdArgs cfg trainPath evalPath
+    let doTrain = case format of
+            Text    -> train
+            XCES    -> train'
+    nerf <- doTrain sgdArgs cfg trainPath evalPath
     flip F.traverse_ outNerf $ \path -> do
         putStrLn $ "\nSaving model in " ++ path ++ "..."
         encodeFile path nerf
@@ -296,32 +304,35 @@ exec NER{..} = case format of
         inp  <- L.lines <$> L.getContents
         forM_ inp $ \sent -> do
             let forest = ner nerf (L.unpack sent)
-            L.putStrLn (showForest forest)
-    XCES -> do
-        nerf <- decodeFile inModel
-        L.putStrLn . XCES.nerXCES (ner nerf) =<< L.getContents
+            -- L.putStrLn (showForest forest)
+                simplify = NETree.mapForest . NETree.onNode $ T.pack . show
+            L.putStrLn . showForest $ simplify forest
+    XCES -> return ()
+--     XCES -> do
+--         nerf <- decodeFile inModel
+--         L.putStrLn . XCES.nerXCES (ner nerf) =<< L.getContents
 
 
-exec Server{..} = do
-    putStr "Loading model..." >> hFlush stdout
-    nerf <- decodeFile inModel
-    nerf `seq` putStrLn " done"
-    let portNum = N.PortNumber $ fromIntegral port
-    putStrLn $ "Listening on port " ++ show port
-    S.runNerfServer nerf portNum
-
-
-exec Client{..} = case format of
-    Text -> do
-        inp  <- L.lines <$> L.getContents
-        forM_ inp $ \sent -> do
-            forest <- S.ner host portNum $ L.unpack sent
-            L.putStrLn (showForest forest)
-    XCES -> do
-        let nerRemote = unsafePerformIO . S.ner host portNum
-        L.putStrLn . XCES.nerXCES nerRemote =<< L.getContents
-  where
-     portNum = N.PortNumber $ fromIntegral port
+-- exec Server{..} = do
+--     putStr "Loading model..." >> hFlush stdout
+--     nerf <- decodeFile inModel
+--     nerf `seq` putStrLn " done"
+--     let portNum = N.PortNumber $ fromIntegral port
+--     putStrLn $ "Listening on port " ++ show port
+--     S.runNerfServer nerf portNum
+-- 
+-- 
+-- exec Client{..} = case format of
+--     Text -> do
+--         inp  <- L.lines <$> L.getContents
+--         forM_ inp $ \sent -> do
+--             forest <- S.ner host portNum $ L.unpack sent
+--             L.putStrLn (showForest forest)
+--     XCES -> do
+--         let nerRemote = unsafePerformIO . S.ner host portNum
+--         L.putStrLn . XCES.nerXCES nerRemote =<< L.getContents
+--   where
+--      portNum = N.PortNumber $ fromIntegral port
 
 
 exec nerfArgs@Ox{..} = do

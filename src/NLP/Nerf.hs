@@ -8,6 +8,7 @@
 module NLP.Nerf
 ( Nerf (..)
 , train
+, train'
 , ner
 , tryOx
 , module NLP.Nerf.Types
@@ -18,6 +19,7 @@ import           Control.Applicative ((<$>), (<*>))
 import           Data.Binary (Binary, put, get)
 import           Data.Foldable (foldMap)
 import           Data.List (intercalate)
+import qualified Data.Map as M
 import qualified Data.Text as T
 import qualified Data.Text.Lazy.IO as L
 
@@ -31,6 +33,7 @@ import qualified Data.CRF.Chain1 as CRF
 import           NLP.Nerf.Types
 import           NLP.Nerf.Tokenize (tokenize, sync)
 import           NLP.Nerf.Schema (SchemaConf, Schema, fromConf, schematize)
+import qualified NLP.Nerf.XCES2 as XCES
 
 
 ---------------------
@@ -75,11 +78,13 @@ train sgdArgs cfg trainPath evalPathM = do
 
 
 -- | Perform named entity recognition (NER) using the Nerf model.
-ner :: Nerf -> String -> N.NeForest NE Word
+ner :: Nerf -> String -> N.NeForest NE T.Text
 ner nerf sent =
-    let ws = map T.pack . tokenize $ sent
+    -- TODO: we could try to recover `nps` attributes.
+    let mkWord x = Word {orth = x, nps = False, msd = []}
+        ws = map T.pack . tokenize $ sent
         schema = fromConf (schemaConf nerf)
-        xs = CRF.tag (crf nerf) (schematize schema ws)
+        xs = CRF.tag (crf nerf) (schematize schema $ map mkWord ws)
     in  IOB.decodeForest [IOB.IOB w x | (w, x) <- zip ws xs]
 
 
@@ -91,7 +96,14 @@ ner nerf sent =
 -- | Read data from enamex file and retokenize (so that internal
 -- tokenization is used).
 readDeep :: FilePath -> IO [N.NeForest NE Word]
-readDeep path = map reTokenize . parseEnamex <$> L.readFile path
+readDeep path
+    = map (mkForest . reTokenize)
+    . parseEnamex <$> L.readFile path
+  where
+    mkForest = N.mapForest $ N.onEither mkNE mkWord
+    mkNE x = M.singleton "" x
+    -- TODO: we could try to recover `nps` attributes.
+    mkWord x = Word {orth = x, nps = False, msd = []}
 
 
 -- | Like `readDeep` but also converts to the CRF representation.
@@ -121,7 +133,7 @@ flatten schema forest =
 
 
 -- | Tokenize sentence with the Nerf tokenizer.
-reTokenize :: N.NeForest NE Word -> N.NeForest NE Word
+reTokenize :: N.NeForest a T.Text -> N.NeForest a T.Text
 reTokenize ft = 
     sync ft ((doTok . leaves) ft)
   where 
@@ -148,40 +160,47 @@ drawSent sent = do
     putStrLn "" 
 
 
--- ------------------------------------------------------------
--- -- New version (preliminary implementation)
--- ------------------------------------------------------------
--- 
--- 
--- -- | A word enriched with morphosyntactic information.
--- -- TODO: Maybe try a parametrized version, `Morph t`, instead?
--- data Morph = Morph {
---     -- | An orthographic form,
---       orth  :: Word
---     -- | No preceding space.
---     , nps   :: Bool
---     -- | Morphosyntactic description.
---     -- TODO: Use tagset-positional?
---     , msd   :: [T.Text] }
--- 
--- 
--- -- | Perform NER on a morphosyntactically disambiguated sentence.
--- -- No re-tokenizetion is performed.
--- ner' :: (w -> Morph) -> Nerf -> [w]  -> N.NeForest NE w
--- ner' = undefined
--- 
--- 
--- -- | Train Nerf on a morphosyntactically annotated (and disambiguated) data.
--- train'
---     :: SgdArgs              -- ^ Args for SGD
---     -> SchemaConf           -- ^ Observation schema configuration
---     -> FilePath             -- ^ Train data (XCES)
---     -> Maybe FilePath       -- ^ Maybe eval data (XCES)
---     -> IO Nerf              -- ^ The resulting Nerf model
--- train sgdArgs cfg trainPath evalPathM = do
---     let schema = fromConf cfg
---         readTrain = readFlatXCES schema trainPath
---         readEvalM = evalPathM >>= \evalPath ->
---             Just ([], readFlatXCES schema evalPath)
---     _crf <- CRF.train sgdArgs readTrain readEvalM CRF.presentFeats
---     return $ Nerf cfg _crf
+------------------------------------------------------------
+-- New version (preliminary implementation)
+------------------------------------------------------------
+
+
+-- | Perform NER on a morphosyntactically disambiguated sentence.
+-- No re-tokenizetion is performed.
+ner' :: (w -> Word) -> Nerf -> [w]  -> N.NeForest NE w
+ner' f nerf ws =
+    let schema = fromConf (schemaConf nerf)
+        xs = CRF.tag (crf nerf) (schematize schema $ map f ws)
+    in  IOB.decodeForest [IOB.IOB w x | (w, x) <- zip ws xs]
+
+
+-- | Train Nerf on a morphosyntactically annotated (and disambiguated) data.
+train'
+    :: SgdArgs              -- ^ Args for SGD
+    -> SchemaConf           -- ^ Observation schema configuration
+    -> FilePath             -- ^ Train data (XCES)
+    -> Maybe FilePath       -- ^ Maybe eval data (XCES)
+    -> IO Nerf              -- ^ The resulting Nerf model
+train' sgdArgs cfg trainPath evalPathM = do
+    let schema = fromConf cfg
+        readTrain = readFlatXCES schema trainPath
+        readEvalM = evalPathM >>= \evalPath ->
+            Just ([], readFlatXCES schema evalPath)
+    -- mapM (mapM showIt) =<< readDeepXCES trainPath
+    -- mapM (mapM print) . XCES.parseXCES =<< L.readFile trainPath
+    _crf <- CRF.train sgdArgs readTrain readEvalM CRF.presentFeats
+    return $ Nerf cfg _crf
+
+
+-- | Read data from the XCES.
+--
+-- TODO: specify `ns`s.
+readDeepXCES :: FilePath -> IO [[N.NeForest NE Word]]
+readDeepXCES = 
+    let prep = (map.map) XCES.fromXCES . XCES.parseXCES
+    in  fmap prep . L.readFile
+
+
+-- | Like `readDeep` but also converts to the CRF representation.
+readFlatXCES :: Schema a -> FilePath -> IO [CRF.SentL Ob Lb]
+readFlatXCES schema path = map (flatten schema) . concat <$> readDeepXCES path

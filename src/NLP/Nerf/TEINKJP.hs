@@ -17,8 +17,10 @@ module NLP.Nerf.TEINKJP
 ) where
 
 
+import           Control.Applicative
 import           Data.Foldable (foldMap)
--- import qualified Data.Text as T
+import qualified Data.Map as M
+import qualified Data.Text as T
 import qualified Data.Text.Lazy as L
 import           Data.String (IsString)
 import qualified Control.Monad.State.Strict as S
@@ -52,6 +54,12 @@ import           NLP.Nerf.Types
 -----------------------------------------------------------
 -- NER on TEI NKJP
 -----------------------------------------------------------
+
+
+--------------------
+-- NER TEI
+--------------------
+
 
 
 -- | Tag a paragraph in the TEI NKJP morphosyntax format.
@@ -98,11 +106,21 @@ teiNeTree (Node n ts) = case n of
         ts' <- teiNeForest ts
         let n' = defNE
                 { N.neID = L.pack (show i)
-                , N.neType = L.fromStrict x
+                -- , N.neType = L.fromStrict x
+                , N.neType = L.fromStrict
+                    $ fromJust' "teiNeTree: unspecified neType"
+                    $ M.lookup "type" x
+                , N.subType = L.fromStrict
+                    <$> M.lookup "subtype" x
+                , N.derived = fmap derivType $ L.fromStrict
+                    <$> M.lookup "derivtype" x
                 , N.ptrs = map (ptrFrom . rootLabel) ts' }
         return $ Node (Left n') ts'
     Right x -> return $ Node (Right x) []
-
+  where
+    fromJust' e Nothing = error e
+    fromJust' e (Just x) = x
+    derivType x = N.Deriv { N.derivType = x, N.derivFrom = "" }
 
 -- | Make pointer from a node.
 ptrFrom :: Either (N.NE L.Text) (X.Seg L.Text) -> N.Ptr L.Text

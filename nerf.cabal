@@ -55,9 +55,9 @@ library
       , IntervalMap         >= 0.3      && < 0.4
 
     exposed-modules:
---         NLP.Nerf
-        NLP.Nerf.Types
---       , NLP.Nerf.Schema
+        NLP.Nerf
+      , NLP.Nerf.Types
+      , NLP.Nerf.Schema
       , NLP.Nerf.Tokenize
       , NLP.Nerf.Dict
       , NLP.Nerf.Dict.Base
@@ -77,11 +77,11 @@ source-repository head
     type: git
     location: https://github.com/kawu/nerf.git
 
--- executable nerf
---   hs-source-dirs: src, tools
---   build-depends:
---     filepath            >= 1.3      && < 1.4,
---     directory           >= 1.1      && < 1.3,
---     temporary           >= 1.1      && < 1.2
---   main-is: nerf.hs
---   ghc-options: -Wall -O2 -threaded -rtsopts
+executable nerf
+  hs-source-dirs: src, tools
+  build-depends:
+    filepath            >= 1.3      && < 1.4,
+    directory           >= 1.1      && < 1.3,
+    temporary           >= 1.1      && < 1.2
+  main-is: nerf.hs
+  ghc-options: -Wall -O2 -threaded -rtsopts

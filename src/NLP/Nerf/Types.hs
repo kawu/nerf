@@ -3,7 +3,7 @@
 
 module NLP.Nerf.Types
 ( Orth
-, Seg (..)
+, Word (..)
 , NE
 , Ob
 , Lb
@@ -20,7 +20,7 @@ type Orth = T.Text
 
 
 -- | A morphosyntactic segment.
-data Seg = Seg {
+data Word = Word {
     -- | An orthographic form,
       orth  :: Orth
     -- | No preceding space.
@@ -28,6 +28,7 @@ data Seg = Seg {
     -- | Morphosyntactic description.
     -- TODO: Use the tagset-positional package?
     , msd   :: [T.Text] }
+    deriving (Show)
 
 
 -- | A named entity.  It has a complex structure for the sake of flexibility.

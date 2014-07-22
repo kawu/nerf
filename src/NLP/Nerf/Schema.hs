@@ -53,8 +53,9 @@ import qualified Data.CRF.Chain1 as CRF
 import qualified Control.Monad.Ox as Ox
 import qualified Control.Monad.Ox.Text as Ox
 
-import NLP.Nerf.Types
-import NLP.Nerf.Dict (Dict)
+import           NLP.Nerf.Types hiding (orth)
+import qualified NLP.Nerf.Types as Nerf
+import           NLP.Nerf.Dict (Dict)
 
 -- | The Ox monad specialized to word token type and text observations.
 type Ox a = Ox.Ox Word T.Text a
@@ -85,7 +86,7 @@ mkBaseOb sent = BaseOb
     , lowOrth   = _lowOrth }
   where
     at          = Ox.atWith sent
-    _orth       = (id `at`)
+    _orth       = (Nerf.orth `at`)
     _lowOrth i  = T.toLower <$> _orth i
 
 -- | A block is a chunk of the Ox computation performed within the
@@ -102,7 +103,7 @@ fromBlock blk xs sent =
 -- | Orthographic form at the current position.
 orthB :: Block ()
 orthB sent = \ks ->
-    let orthOb = Ox.atWith sent id
+    let orthOb = Ox.atWith sent Nerf.orth
     in  mapM_ (Ox.save . orthOb) ks
 
 -- | Orthographic form split into two observations: the lowercased form and

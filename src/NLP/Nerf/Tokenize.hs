@@ -29,6 +29,8 @@ import qualified Data.IntervalMap.Strict as I
 
 import           Data.Named.Tree (NeForest, NeTree)
 
+import qualified NLP.Nerf.Types as Nerf
+
 
 -------------------------------------
 -- Tokenization definition
@@ -68,6 +70,10 @@ instance Word Text.Text where
 
 instance Word LazyText.Text where
     word = LazyText.unpack
+
+
+instance Word Nerf.Word where
+    word = word . Nerf.orth
 
 
 essence :: Word a => a -> Int
