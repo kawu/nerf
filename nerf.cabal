@@ -25,12 +25,14 @@ category:           Natural Language Processing
 homepage:           https://github.com/kawu/nerf
 build-type:         Simple
 
+data-files: config/nkjp-tagset.cfg
+
 library
     hs-source-dirs: src
 
     build-depends:
         base                >= 4        && < 5
-      , containers
+      , containers          >= 0.5      && < 0.6
       , vector
       , text
       , binary
@@ -39,11 +41,11 @@ library
       , tagsoup             >= 0.13     && < 0.14
       -- , polysoup            >= 0.2      && < 0.3
       , polysoup            >= 0.6      && < 0.7
-      , crf-chain1          >= 0.2      && < 0.3
+      , crf-chain1          >= 0.3.0    && < 0.4
       , data-named          >= 0.6      && < 0.7
       , nkjp                >= 0.5      && < 0.6
       , monad-ox            >= 0.2      && < 0.3
-      , sgd                 >= 0.2.1    && < 0.3
+      , sgd                 >= 0.3.5    && < 0.4
       -- , polimorf            >= 0.6.0    && < 0.7
       , polimorf            >= 0.7.3    && < 0.8
       -- , dawg                >= 0.8.1    && < 0.9
@@ -53,6 +55,7 @@ library
       , network             >= 2.3      && < 2.4
       , cmdargs             >= 0.10     && < 0.11
       , IntervalMap         >= 0.3      && < 0.4
+      , tagset-positional   >= 0.3      && < 0.4
 
     exposed-modules:
         NLP.Nerf

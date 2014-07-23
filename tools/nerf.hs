@@ -27,7 +27,10 @@ import qualified Data.Text.Lazy as L
 import qualified Data.Text.Lazy.IO as L
 import qualified Data.DAWG.Static as D
 
-import           NLP.Nerf (train, train', ner, tryOx)
+-- Positional tagset
+import qualified Data.Tagset.Positional as P
+
+import           NLP.Nerf (train, train', ner, tryOx, tryOxXCES)
 import           NLP.Nerf.Schema (defaultConf)
 import           NLP.Nerf.Dict
     ( extractPoliMorf, extractPNEG, extractNELexicon, extractProlexbase
@@ -43,6 +46,10 @@ import qualified NLP.Nerf.XCES2 as XCES2
 import qualified Data.Named.Tree as NETree
 import qualified Text.NKJP.Named as NKJP.NE
 import qualified Text.NKJP.Morphosyntax as NKJP.MX
+
+import           Paths_nerf (version, getDataFileName)
+import           Data.Version (showVersion)
+
 
 
 ---------------------------------------
@@ -67,11 +74,17 @@ data Format
     deriving (Data, Typeable, Show)
 
 
+-- | A description of the Concraft-pl tool        
+nerfDesc :: String             
+nerfDesc = "Nerf " ++ showVersion version
+
+
 data Nerf
   = Train
     { trainPath     :: FilePath
     , evalPath      :: Maybe FilePath
     , format        :: Format
+    , tagsetPath    :: Maybe FilePath
     , poliMorf      :: Maybe FilePath
     , prolex        :: Maybe FilePath
     , pneg          :: Maybe FilePath
@@ -108,6 +121,8 @@ data Nerf
 --     , port          :: Int }
   | Ox
     { dataPath      :: FilePath
+    , format        :: Format
+    , tagsetPath    :: Maybe FilePath
     , poliMorf      :: Maybe FilePath
     , prolex        :: Maybe FilePath
     , pneg          :: Maybe FilePath
@@ -128,6 +143,7 @@ trainMode = Train
     , format = enum
         [ Text &= help "Enamex"
         , XCES &= help "XCES" ]
+    , tagsetPath = def &= typFile &= help "Tagset definition file"
     , poliMorf = def &= typFile &= help "Path to PoliMorf"
     , prolex = def &= typFile &= help "Path to Prolexbase"
     , pneg = def &= typFile &= help "Path to PNEG-LMF"
@@ -183,6 +199,10 @@ nerMode = NER
 oxMode :: Nerf
 oxMode = Ox
     { dataPath = def &= argPos 0 &= typ "DATA-FILE"
+    , format = enum
+        [ Text &= help "Enamex"
+        , XCES &= help "XCES" ]
+    , tagsetPath = def &= typFile &= help "Tagset definition file"
     , poliMorf = def &= typFile &= help "Path to PoliMorf"
     , prolex = def &= typFile &= help "Path to Prolexbase"
     , pneg = def &= typFile &= help "Path to PNEG-LMF"
@@ -206,6 +226,8 @@ argModes = cmdArgsMode $ modes
     -- [ trainMode, cvMode, nerMode, serverMode, clientMode
     [ trainMode, cvMode, nerMode
     , cmpMode, oxMode, nkjp2xcesMode ]
+    &= summary nerfDesc
+    &= program "nerf"
 
 
 data Resources = Resources
@@ -255,18 +277,32 @@ exec :: Nerf -> IO ()
 
 
 exec nerfArgs@Train{..} = do
+    -- Dictionaries
     Resources{..} <- extract nerfArgs
     cfg <- defaultConf
         (catMaybes [poliDict, prolexDict, pnegDict, neLexDict])
         intDict extDict
+
+    -- Tagset
+    tagsetPath' <- case tagsetPath of
+        Nothing -> getDataFileName "config/nkjp-tagset.cfg"
+        Just x  -> return x     
+    tagset <- P.parseTagset tagsetPath' <$> readFile tagsetPath'
+
+    -- Format
     let doTrain = case format of
             Text    -> train
-            XCES    -> train'
+            XCES    -> train' tagset
+
+    -- Training proper
     nerf <- doTrain sgdArgs cfg trainPath evalPath
     flip F.traverse_ outNerf $ \path -> do
         putStrLn $ "\nSaving model in " ++ path ++ "..."
         encodeFile path nerf
+
   where
+    
+    -- SGD parameters
     sgdArgs = SGD.SgdArgs
         { SGD.batchSize = batchSize
         , SGD.regVar = regVar
@@ -336,11 +372,25 @@ exec NER{..} = case format of
 
 
 exec nerfArgs@Ox{..} = do
+    -- Dictionaries
     Resources{..} <- extract nerfArgs
     cfg <- defaultConf
         (catMaybes [poliDict, prolexDict, pnegDict, neLexDict])
         intDict extDict
-    tryOx cfg dataPath
+
+    -- Tagset
+    tagsetPath' <- case tagsetPath of
+        Nothing -> getDataFileName "config/nkjp-tagset.cfg"
+        Just x  -> return x     
+    tagset <- P.parseTagset tagsetPath' <$> readFile tagsetPath'
+
+    -- Format
+    let doOx = case format of
+            Text    -> tryOx
+            XCES    -> tryOxXCES tagset
+
+    -- Observation extraction proper
+    doOx cfg dataPath
 
 
 exec Compare{..} = do

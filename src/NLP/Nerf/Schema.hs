@@ -45,11 +45,13 @@ import Data.Maybe (maybeToList)
 import Data.Binary (Binary, put, get)
 import qualified Data.Char as C
 import qualified Data.Set as S
+import qualified Data.Map as M
 import qualified Data.Vector as V
 import qualified Data.Text as T
 import qualified Data.DAWG.Static as D
 
 import qualified Data.CRF.Chain1 as CRF
+import qualified Data.Tagset.Positional as Tagset
 import qualified Control.Monad.Ox as Ox
 import qualified Control.Monad.Ox.Text as Ox
 
@@ -122,6 +124,9 @@ splitOrthB sent = \ks -> do
 lowPrefixesB :: [Int] -> Block ()
 lowPrefixesB ns sent = \ks ->
     forM_ ks $ \i ->
+        -- TODO: Perhaps should use `Ox.group` here, for the
+        -- sake of safety (imagine someone use `lowPrefixesB`
+        -- e.g. on the range [4, 3, 2]).
         mapM_ (Ox.save . lowPrefix i) ns
   where
     BaseOb{..}      = mkBaseOb sent
@@ -210,6 +215,50 @@ dictB dict sent = \ks -> do
     searchDict i    = join . maybeToList $
         S.toList <$> (orth i >>= flip D.lookup dict . T.unpack)
 
+-- | Part-of-speech.
+posB :: Block ()
+posB sent = \ks ->
+    mapM_ (Ox.save . pos) ks
+  where
+    pos i = do
+        w <- sent `Ox.atWith` id $ i
+        msd <- Nerf.msd w
+        return $ Tagset.pos msd
+
+-- | Part-of-speech pair.
+posPairB :: Block ()
+posPairB sent = \ks ->
+    forM_ ks $ \i -> do
+        Ox.save $ link <$> pos i <*> pos (i - 1)
+  where
+    link x y = T.concat [x, "-", y]
+    pos i = do
+        w <- sent `Ox.atWith` id $ i
+        msd <- Nerf.msd w
+        return $ Tagset.pos msd
+
+-- | Case grammatical attribute.
+caseB :: Block ()
+caseB sent = \ks ->
+    mapM_ (Ox.save . cas) ks
+  where
+    cas i = do
+        w <- sent `Ox.atWith` id $ i
+        msd <- Nerf.msd w
+        M.lookup "cas" $ Tagset.atts msd
+
+-- | Case pair.
+casePairB :: Block ()
+casePairB sent = \ks ->
+    forM_ ks $ \i -> do
+        Ox.save $ link <$> cas i <*> cas (i - 1)
+  where
+    link x y = T.concat [x, "-", y]
+    cas i = do
+        w <- sent `Ox.atWith` id $ i
+        msd <- Nerf.msd w
+        M.lookup "cas" $ Tagset.atts msd
+
 -- | Body of configuration entry.
 data Body a = Body {
     -- | Range argument for the schema block. 
@@ -271,6 +320,14 @@ data SchemaConf = SchemaConf {
     , intTrigsC         :: Entry Dict
     -- | Dictionary of external triggers.
     , extTrigsC         :: Entry Dict
+    -- | Part-of-speech.
+    , posC              :: Entry ()
+    -- | Part-of-speech pair.
+    , posPairC          :: Entry ()
+    -- | Grammatical case.
+    , caseC             :: Entry ()
+    -- | Grammatical case pair.
+    , casePairC         :: Entry ()
     } deriving (Show)
 
 instance Binary SchemaConf where
@@ -287,14 +344,20 @@ instance Binary SchemaConf where
         put dictC
         put intTrigsC
         put extTrigsC
+        put posC
+        put posPairC
+        put caseC
+        put casePairC
     get = SchemaConf
         <$> get <*> get <*> get <*> get
+        <*> get <*> get <*> get <*> get
         <*> get <*> get <*> get <*> get
         <*> get <*> get <*> get <*> get
 
 -- | Null configuration of the observation schema.
 nullConf :: SchemaConf
 nullConf = SchemaConf
+    Nothing Nothing Nothing Nothing
     Nothing Nothing Nothing Nothing
     Nothing Nothing Nothing Nothing
     Nothing Nothing Nothing Nothing
@@ -318,7 +381,11 @@ defaultConf neDicts intDict extDict = do
         , packedPairC   = entry                 [0]
         , dictC         = entryWith neDicts     [-1, 0]
         , intTrigsC     = entryWith'Mb intDict  [0]
-        , extTrigsC     = entryWith'Mb extDict  [-1] }
+        , extTrigsC     = entryWith'Mb extDict  [-1]
+        , posC          = entry                 [-1, 0]
+        , posPairC      = entry                 [0]
+        , caseC         = entry                 [-1, 0]
+        , casePairC     = entry                 [0] }
 
 mkArg0 :: Block () -> Entry () -> Schema ()
 mkArg0 blk (Just x) = fromBlock blk (range x)
@@ -350,7 +417,11 @@ fromConf SchemaConf{..} = sequenceS_
     , mkArg0 packedPairB packedPairC
     , mkArgs1 dictB dictC
     , mkArg1 dictB intTrigsC
-    , mkArg1 dictB extTrigsC ]
+    , mkArg1 dictB extTrigsC
+    , mkArg0 posB posC
+    , mkArg0 posPairB posPairC
+    , mkArg0 caseB caseC
+    , mkArg0 casePairB casePairC ]
 
 -- | Use the schema to extract observations from the sentence.
 schematize :: Schema a -> [Word] -> CRF.Sent Ob

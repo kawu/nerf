@@ -15,7 +15,7 @@ import qualified Control.Monad.State.Strict as ST
 import qualified Control.Monad.Writer.Strict as W
 import qualified Data.Traversable as Tr
 import qualified Data.Set as S
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import qualified Data.Char as C
 import qualified Data.Text as T
 

@@ -35,11 +35,12 @@ module NLP.Nerf.XCES2
 import           Control.Applicative
 -- import           Control.Monad (void)
 import           Control.Arrow (second)
-import qualified Control.Monad.State.Strict as S
+import qualified Control.Monad.State.Strict as St
 import           Data.String (IsString)
-import           Data.Maybe (catMaybes)
+import           Data.Maybe (catMaybes, mapMaybe)
 -- import           Data.List (intersperse)
-import qualified Data.Map as M
+import qualified Data.Set as S
+import qualified Data.Map.Strict as M
 import qualified Data.Foldable as F
 import qualified Data.Traversable as R
 import qualified Data.Text.Lazy as L
@@ -48,6 +49,8 @@ import qualified Data.Text.Lazy as L
 -- import qualified Data.Named.Tree as Tr
 -- import           Data.Named.Tree (NeForest)
 import           Data.Named.Tree
+
+import           Data.Tagset.Positional (Tagset, parseTag)
 
 -- import           Text.StringLike (StringLike)
 import           Text.HTML.TagSoup (Tag (..))
@@ -151,8 +154,8 @@ data Lex = Lex
 
 -- | Convert the XCES representation of a sentence into the internal
 -- representation used within Nerf.
-fromXCES :: NeForest a (Maybe Tok) -> NeForest a Word
-fromXCES = rmNoF . tok2word
+fromXCES :: Tagset -> NeForest a (Maybe Tok) -> NeForest a Word
+fromXCES tagset = rmNoF . tok2word tagset
 
 
 rmNoF :: NeForest a (Maybe b) -> NeForest a b
@@ -165,8 +168,8 @@ rmNoT (Node (Right (Just x)) _) = [Node (Right x) []]
 rmNoT (Node (Right Nothing) _)  = []
 
 
-tok2word :: NeForest a (Maybe Tok) -> NeForest a (Maybe Word)
-tok2word =
+tok2word :: Tagset -> NeForest a (Maybe Tok) -> NeForest a (Maybe Word)
+tok2word tagset =
     evalConv . mapM (R.mapM f)
   where
     f nd = case nd of
@@ -178,33 +181,35 @@ tok2word =
             _nps <- getNps
             let Tok{..} = t
                 -- TODO: we take only the first disam MSD into account.
-                -- Could use the `Set` data structure instead.
+                -- We could use the `Set` data structure instead.
                 w = Word {orth = L.toStrict orth, nps = _nps, msd = mkMSD lexs}
             setNps False
             return $ Right $ Just w
-    mkMSD [] = []
-    mkMSD (Lex{..}:xs) = if disamb
-        then map L.toStrict $ L.split (==':') ctag
-        else mkMSD xs
+    mkMSD = safeHead . mapMaybe fromLex
+    fromLex Lex{..} = if disamb
+        then Just $ parseTag tagset $ L.toStrict ctag
+        else Nothing
+    safeHead (x:_) = Just x
+    safeHead [] = Nothing
 
 
 -- | A conversion monad.
-type Conv = S.State Bool
+type Conv = St.State Bool
 
 
 -- | Evaluate the `Conv` monad.
 evalConv :: Conv a -> a
-evalConv = flip S.evalState False
+evalConv = flip St.evalState False
 
 
 -- | Get the current `nps` state.
 getNps :: Conv Bool
-getNps = S.get
+getNps = St.get
 
 
 -- | Set the current `nps` state.
 setNps :: Bool -> Conv ()
-setNps = S.put
+setNps = St.put
 
 
 ---------------------------------------------------------------------

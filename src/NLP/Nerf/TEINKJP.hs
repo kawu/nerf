@@ -19,8 +19,8 @@ module NLP.Nerf.TEINKJP
 
 import           Control.Applicative
 import           Data.Foldable (foldMap)
-import qualified Data.Map as M
-import qualified Data.Text as T
+import qualified Data.Map.Strict as M
+-- import qualified Data.Text as T
 import qualified Data.Text.Lazy as L
 import           Data.String (IsString)
 import qualified Control.Monad.State.Strict as S
@@ -119,7 +119,7 @@ teiNeTree (Node n ts) = case n of
     Right x -> return $ Node (Right x) []
   where
     fromJust' e Nothing = error e
-    fromJust' e (Just x) = x
+    fromJust' _ (Just x) = x
     derivType x = N.Deriv { N.derivType = x, N.derivFrom = "" }
 
 -- | Make pointer from a node.

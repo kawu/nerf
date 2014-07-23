@@ -3,3 +3,5 @@
 0.6.0	Jul 2014
 	* Add support for complex NE tags (of a `Map` form)
 	* Add support for morphosyntactic input (a version of the XCES format)
+	* Allow to use morphosyntactic information as observations
+	* Set SGD on-disk training to be the default

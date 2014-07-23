@@ -11,6 +11,7 @@ module NLP.Nerf
 , train'
 , ner
 , tryOx
+, tryOxXCES
 , module NLP.Nerf.Types
 ) where
 
@@ -19,13 +20,15 @@ import           Control.Applicative ((<$>), (<*>))
 import           Data.Binary (Binary, put, get)
 import           Data.Foldable (foldMap)
 import           Data.List (intercalate)
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import qualified Data.Text.Lazy.IO as L
 
 import           Text.Named.Enamex (parseEnamex)
 import qualified Data.Named.Tree as N
 import qualified Data.Named.IOB as IOB
+
+import qualified Data.Tagset.Positional as P
 
 import           Numeric.SGD (SgdArgs)
 import qualified Data.CRF.Chain1 as CRF
@@ -66,9 +69,10 @@ train
 train sgdArgs cfg trainPath evalPathM = do
     let schema = fromConf cfg
         readTrain = readFlat schema trainPath
-        readEvalM = evalPathM >>= \evalPath ->
-            Just ([], readFlat schema evalPath)
-    _crf <- CRF.train sgdArgs readTrain readEvalM CRF.presentFeats
+        readEval  = case evalPathM of 
+            Just evalPath -> readFlat schema evalPath
+            Nothing -> return []
+    _crf <- CRF.train sgdArgs True CRF.presentFeats [] readTrain readEval
     return $ Nerf cfg _crf
 
 
@@ -81,7 +85,7 @@ train sgdArgs cfg trainPath evalPathM = do
 ner :: Nerf -> String -> N.NeForest NE T.Text
 ner nerf sent =
     -- TODO: we could try to recover `nps` attributes.
-    let mkWord x = Word {orth = x, nps = False, msd = []}
+    let mkWord x = Word {orth = x, nps = False, msd = undefined}
         ws = map T.pack . tokenize $ sent
         schema = fromConf (schemaConf nerf)
         xs = CRF.tag (crf nerf) (schematize schema $ map mkWord ws)
@@ -103,7 +107,7 @@ readDeep path
     mkForest = N.mapForest $ N.onEither mkNE mkWord
     mkNE x = M.singleton "" x
     -- TODO: we could try to recover `nps` attributes.
-    mkWord x = Word {orth = x, nps = False, msd = []}
+    mkWord x = Word {orth = x, nps = False, msd = undefined}
 
 
 -- | Like `readDeep` but also converts to the CRF representation.
@@ -153,6 +157,13 @@ tryOx cfg path = do
     mapM_ drawSent input
 
 
+-- | Show results of observation extraction on the input XCES file.
+tryOxXCES :: P.Tagset -> SchemaConf -> FilePath -> IO ()
+tryOxXCES tagset cfg path = do
+    input <- readFlatXCES tagset (fromConf cfg) path
+    mapM_ drawSent input
+
+
 drawSent :: CRF.SentL Ob Lb -> IO ()
 drawSent sent = do
     let unDist (x, y) = (x, CRF.unDist y)
@@ -176,31 +187,37 @@ ner' f nerf ws =
 
 -- | Train Nerf on a morphosyntactically annotated (and disambiguated) data.
 train'
-    :: SgdArgs              -- ^ Args for SGD
+    :: P.Tagset             -- ^ Tagset definition
+    -> SgdArgs              -- ^ Args for SGD
     -> SchemaConf           -- ^ Observation schema configuration
     -> FilePath             -- ^ Train data (XCES)
     -> Maybe FilePath       -- ^ Maybe eval data (XCES)
     -> IO Nerf              -- ^ The resulting Nerf model
-train' sgdArgs cfg trainPath evalPathM = do
+train' tagset sgdArgs cfg trainPath evalPathM = do
     let schema = fromConf cfg
-        readTrain = readFlatXCES schema trainPath
-        readEvalM = evalPathM >>= \evalPath ->
-            Just ([], readFlatXCES schema evalPath)
-    -- mapM (mapM showIt) =<< readDeepXCES trainPath
+        readTrain = readFlatXCES tagset schema trainPath
+--         readEvalM = evalPathM >>= \evalPath ->
+--             Just ([], readFlatXCES schema evalPath)
+        readEval  = case evalPathM of 
+            Just evalPath -> readFlatXCES tagset schema evalPath
+            Nothing -> return []
     -- mapM (mapM print) . XCES.parseXCES =<< L.readFile trainPath
-    _crf <- CRF.train sgdArgs readTrain readEvalM CRF.presentFeats
+    -- mapM (mapM print) =<< readDeepXCES tagset trainPath
+    _crf <- CRF.train sgdArgs True CRF.presentFeats [] readTrain readEval
     return $ Nerf cfg _crf
 
 
 -- | Read data from the XCES.
 --
 -- TODO: specify `ns`s.
-readDeepXCES :: FilePath -> IO [[N.NeForest NE Word]]
-readDeepXCES = 
-    let prep = (map.map) XCES.fromXCES . XCES.parseXCES
+readDeepXCES :: P.Tagset -> FilePath -> IO [[N.NeForest NE Word]]
+readDeepXCES tagset = 
+    let prep = (map.map) (XCES.fromXCES tagset) . XCES.parseXCES
     in  fmap prep . L.readFile
 
 
 -- | Like `readDeep` but also converts to the CRF representation.
-readFlatXCES :: Schema a -> FilePath -> IO [CRF.SentL Ob Lb]
-readFlatXCES schema path = map (flatten schema) . concat <$> readDeepXCES path
+readFlatXCES :: P.Tagset -> Schema a -> FilePath -> IO [CRF.SentL Ob Lb]
+readFlatXCES tagset schema path
+    = map (flatten schema) . concat
+    <$> readDeepXCES tagset path
