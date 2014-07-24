@@ -16,7 +16,7 @@ import           Control.Applicative ((<$>), (<*>))
 import           Control.Arrow (second)
 import           Control.Monad (forM_)
 import           Data.Maybe (catMaybes)
-import           Data.Binary (encodeFile, decodeFile)
+-- import           Data.Binary (encodeFile, decodeFile)
 import           Data.Text.Binary ()
 import           Text.Named.Enamex (parseEnamex, showForest)
 import qualified Data.Foldable as F
@@ -30,13 +30,14 @@ import qualified Data.DAWG.Static as D
 -- Positional tagset
 import qualified Data.Tagset.Positional as P
 
-import           NLP.Nerf (train, train', ner, tryOx, tryOxXCES)
+import           NLP.Nerf
+    (train, train', ner, tryOx, tryOx', saveModel, loadModel)
 import           NLP.Nerf.Schema (defaultConf)
 import           NLP.Nerf.Dict
     ( extractPoliMorf, extractPNEG, extractNELexicon, extractProlexbase
     , extractIntTriggers, extractExtTriggers, Dict )
 -- import           NLP.Nerf.XCES as XCES
--- import qualified NLP.Nerf.Server as S
+import qualified NLP.Nerf.Server as S
 
 import           NLP.Nerf.Compare ((.+.))
 import qualified NLP.Nerf.Compare as C
@@ -98,6 +99,7 @@ data Nerf
     , outNerf       :: Maybe FilePath }
   | CV
     { dataDir       :: FilePath
+    , tagsetPath    :: Maybe FilePath
     , poliMorf      :: Maybe FilePath
     , prolex        :: Maybe FilePath
     , pneg          :: Maybe FilePath
@@ -112,13 +114,13 @@ data Nerf
   | NER
     { inModel       :: FilePath
     , format        :: Format }
---   | Server
---     { inModel       :: FilePath
---     , port          :: Int }
---   | Client
---     { format        :: Format
---     , host          :: String
---     , port          :: Int }
+  | Server
+    { inModel       :: FilePath
+    , port          :: Int }
+  | Client
+    { format        :: Format
+    , host          :: String
+    , port          :: Int }
   | Ox
     { dataPath      :: FilePath
     , format        :: Format
@@ -160,6 +162,7 @@ trainMode = Train
 cvMode :: Nerf
 cvMode = CV
     { dataDir = def &= argPos 0 &= typ "DATA-DIR"
+    , tagsetPath = def &= typFile &= help "Tagset definition file"
     , poliMorf = def &= typFile &= help "Path to PoliMorf"
     , prolex = def &= typFile &= help "Path to Prolexbase"
     , pneg = def &= typFile &= help "Path to PNEG-LMF"
@@ -181,19 +184,19 @@ nerMode = NER
         , XCES &= help "XCES" ] }
 
 
--- serverMode :: Nerf
--- serverMode = Server
---     { inModel = def &= argPos 0 &= typ "MODEL-FILE"
---     , port    = portDefault &= help "Port number" }
--- 
--- 
--- clientMode :: Nerf
--- clientMode = Client
---     { port   = portDefault &= help "Port number"
---     , host   = "localhost" &= help "Server host name"
---     , format   = enum
---         [ Text &= help "Raw text"
---         , XCES &= help "XCES" ] }
+serverMode :: Nerf
+serverMode = Server
+    { inModel = def &= argPos 0 &= typ "MODEL-FILE"
+    , port    = portDefault &= help "Port number" }
+
+
+clientMode :: Nerf
+clientMode = Client
+    { port   = portDefault &= help "Port number"
+    , host   = "localhost" &= help "Server host name"
+    , format   = enum
+        [ Text &= help "Raw text"
+        , XCES &= help "XCES" ] }
 
 
 oxMode :: Nerf
@@ -223,8 +226,7 @@ nkjp2xcesMode = NKJP2XCES
 
 argModes :: Mode (CmdArgs Nerf)
 argModes = cmdArgsMode $ modes
-    -- [ trainMode, cvMode, nerMode, serverMode, clientMode
-    [ trainMode, cvMode, nerMode
+    [ trainMode, cvMode, nerMode, serverMode, clientMode
     , cmpMode, oxMode, nkjp2xcesMode ]
     &= summary nerfDesc
     &= program "nerf"
@@ -292,13 +294,13 @@ exec nerfArgs@Train{..} = do
     -- Format
     let doTrain = case format of
             Text    -> train
-            XCES    -> train' tagset
+            XCES    -> train'
 
     -- Training proper
-    nerf <- doTrain sgdArgs cfg trainPath evalPath
+    nerf <- doTrain tagset sgdArgs cfg trainPath evalPath
     flip F.traverse_ outNerf $ \path -> do
         putStrLn $ "\nSaving model in " ++ path ++ "..."
-        encodeFile path nerf
+        saveModel path nerf
 
   where
     
@@ -312,19 +314,28 @@ exec nerfArgs@Train{..} = do
 
 
 exec nerfArgs@CV{..} = do
+    -- Dictionaries
     Resources{..} <- extract nerfArgs
     cfg <- defaultConf
         (catMaybes [poliDict, prolexDict, pnegDict, neLexDict])
         intDict extDict
+
+    -- Tagset
+    tagsetPath' <- case tagsetPath of
+        Nothing -> getDataFileName "config/nkjp-tagset.cfg"
+        Just x  -> return x     
+    tagset <- P.parseTagset tagsetPath' <$> readFile tagsetPath'
+
+    -- CV proper
     parts <- getParts dataDir
     forM_ (enumDivs parts) $ \(evalPath, trainPaths) -> do
         putStrLn $ "\nPart: " ++ evalPath
         withParts trainPaths $ \trainPath -> do
-            nerf <- train sgdArgs cfg trainPath (Just evalPath)
+            nerf <- train tagset sgdArgs cfg trainPath (Just evalPath)
             flip F.traverse_ outDir $ \dir -> do
                 let path = dir </> takeBaseName evalPath <.> ".bin"
                 putStrLn $ "\nSaving model in " ++ path ++ "..."
-                encodeFile path nerf
+                saveModel path nerf
   where
     sgdArgs = SGD.SgdArgs
         { SGD.batchSize = batchSize
@@ -334,41 +345,47 @@ exec nerfArgs@CV{..} = do
         , SGD.tau = tau }
 
 
-exec NER{..} = case format of
+exec NER{..} = do
+    nerf <- loadModel inModel
+    case format of
+        Text -> do
+            inp  <- L.lines <$> L.getContents
+            forM_ inp $ \sent -> do
+                let forest = ner nerf (L.unpack sent)
+                -- L.putStrLn (showForest forest)
+                    simplify = NETree.mapForest . NETree.onNode $ T.pack . show
+                L.putStrLn . showForest $ simplify forest
+        XCES -> do
+            error "XCES format not supported for NER yet"
+--             L.putStrLn . XCES.nerXCES (ner nerf) =<< L.getContents
+--                   . 
+--                   . XCES2.parseXCES
+--                 =<< L.getContents
+
+
+exec Server{..} = do
+    putStr "Loading model..." >> hFlush stdout
+    nerf <- loadModel inModel
+    nerf `seq` putStrLn " done"
+    let portNum = N.PortNumber $ fromIntegral port
+    putStrLn $ "Listening on port " ++ show port
+    S.runNerfServer nerf portNum
+
+
+exec Client{..} = case format of
     Text -> do
-        nerf <- decodeFile inModel
         inp  <- L.lines <$> L.getContents
         forM_ inp $ \sent -> do
-            let forest = ner nerf (L.unpack sent)
-            -- L.putStrLn (showForest forest)
-                simplify = NETree.mapForest . NETree.onNode $ T.pack . show
+            forest <- S.ner host portNum $ L.unpack sent
+            let simplify = NETree.mapForest . NETree.onNode $ T.pack . show
             L.putStrLn . showForest $ simplify forest
-    XCES -> return ()
---     XCES -> do
---         nerf <- decodeFile inModel
---         L.putStrLn . XCES.nerXCES (ner nerf) =<< L.getContents
-
-
--- exec Server{..} = do
---     putStr "Loading model..." >> hFlush stdout
---     nerf <- decodeFile inModel
---     nerf `seq` putStrLn " done"
---     let portNum = N.PortNumber $ fromIntegral port
---     putStrLn $ "Listening on port " ++ show port
---     S.runNerfServer nerf portNum
--- 
--- 
--- exec Client{..} = case format of
---     Text -> do
---         inp  <- L.lines <$> L.getContents
---         forM_ inp $ \sent -> do
---             forest <- S.ner host portNum $ L.unpack sent
---             L.putStrLn (showForest forest)
---     XCES -> do
+            -- L.putStrLn (showForest forest)
+    XCES -> do
+        error "XCES format not supported for NER yet"
 --         let nerRemote = unsafePerformIO . S.ner host portNum
 --         L.putStrLn . XCES.nerXCES nerRemote =<< L.getContents
---   where
---      portNum = N.PortNumber $ fromIntegral port
+  where
+     portNum = N.PortNumber $ fromIntegral port
 
 
 exec nerfArgs@Ox{..} = do
@@ -387,7 +404,7 @@ exec nerfArgs@Ox{..} = do
     -- Format
     let doOx = case format of
             Text    -> tryOx
-            XCES    -> tryOxXCES tagset
+            XCES    -> tryOx' tagset
 
     -- Observation extraction proper
     doOx cfg dataPath
