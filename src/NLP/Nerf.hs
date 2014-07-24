@@ -14,7 +14,8 @@ module NLP.Nerf
 
 -- * NER
 , ner
-, ner'
+, nerX
+, nerW
 
 -- * Training
 , train
@@ -220,8 +221,17 @@ drawSent sent = do
 
 -- | Perform NER on a morphosyntactically disambiguated sentence.
 -- No re-tokenizetion is performed.
-ner' :: (w -> Word) -> Nerf -> [w]  -> N.NeForest NE w
-ner' f nerf ws =
+nerW :: Nerf -> [Word]  -> N.NeForest NE Word
+nerW nerf ws =
+    let schema = fromConf (schemaConf nerf)
+        xs = CRF.tag (crf nerf) (schematize schema ws)
+    in  IOB.decodeForest [IOB.IOB w x | (w, x) <- zip ws xs]
+
+
+-- | Perform NER on a morphosyntactically disambiguated sentence.
+-- No re-tokenizetion is performed.
+nerX :: Nerf -> (w -> Word) -> [w]  -> N.NeForest NE w
+nerX nerf f ws =
     let schema = fromConf (schemaConf nerf)
         xs = CRF.tag (crf nerf) (schematize schema $ map f ws)
     in  IOB.decodeForest [IOB.IOB w x | (w, x) <- zip ws xs]
@@ -254,8 +264,10 @@ train' tagset sgdArgs cfg trainPath evalPathM = do
 -- TODO: specify `ns`s.
 readDeepXCES :: P.Tagset -> FilePath -> IO [[N.NeForest NE Word]]
 readDeepXCES tagset = 
-    let prep = (map.map) (XCES.fromXCES tagset) . XCES.parseXCES
-    in  fmap prep . L.readFile
+    let prep = (map.map)
+            $ N.mapForest (N.onLeaf snd)
+            . XCES.fromXCES tagset
+    in  fmap (prep . XCES.parseXCES) . L.readFile
 
 
 -- | Like `readDeep` but also converts to the CRF representation.

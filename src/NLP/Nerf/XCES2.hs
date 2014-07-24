@@ -27,8 +27,13 @@ module NLP.Nerf.XCES2
 -- * NKJP
 , fromNKJP
 
+-- * NER
+, NER
+, nerXCES
+
 -- * Conversion
 , fromXCES
+, toXCES
 ) where
 
 
@@ -43,6 +48,7 @@ import qualified Data.Set as S
 import qualified Data.Map.Strict as M
 import qualified Data.Foldable as F
 import qualified Data.Traversable as R
+import qualified Data.Text as T
 import qualified Data.Text.Lazy as L
 
 -- import           Data.Tree
@@ -84,7 +90,7 @@ type Para = [Sent]
 -- with tokens (or no-space markers) stored in leaves.
 -- No-space markers are represented with `Nothing` values.
 --
--- `Sent t` is equal to `NeForest (NE t) (Maybe (Tok t))` as well.
+-- `Sent` is equal to `NeForest NE (Maybe Tok)` as well.
 type Sent = [Root]
 
 
@@ -92,46 +98,9 @@ type Sent = [Root]
 type Root = NeTree NE (Maybe Tok)
 
 
--- -- | A named entity (NE).  It is a higly simplified version of
--- -- the definition given in the nkjp package.
--- data NE t = NE
---     { neType        :: t
---     , subType       :: Maybe t
---     , derivType     :: Maybe t }
---     deriving (Show, Functor)
--- 
--- 
--- | NE definition given in the nkjp package:
--- data NE t = NE
---     { neID          :: t
---     -- | We don't specify `derivFrom` for the same reason for which
---     -- we don't specify `base` values. 
---     , derived       :: Maybe (Deriv t)
---     , neType        :: t
---     , subType       :: Maybe t
---     -- | Can be easly calculated from tokens. 
---     , orth          :: t
---     -- | Left base or Right when.  Nerf doesn't output base
---     -- forms, for which reason they are ignored.
---     , base          :: Maybe (Either t t)
---     -- | The rest of attributes are irrelevant from Nerf and
---     -- full NKJP points of view.
---     , cert          :: Maybe Cert
---     , certComment   :: Maybe t
---     , ptrs          :: [Ptr t] }
---     deriving (Show)
--- 
--- -- | If NE is a derived entity.
--- data Deriv t = Deriv
---     { derivType :: t 
---     , derivFrom :: t }
---     deriving (Show, Functor)
-
-
 -- | A token.
--- TODO: Change text to strict.
 data Tok = Tok
-    { orth  :: L.Text
+    { orth  :: T.Text
     , lexs  :: [Lex] }
     deriving (Show)
 
@@ -139,12 +108,28 @@ data Tok = Tok
 -- | A lexical entry -- a potential interpretation of a segment.
 -- TODO: Change text to strict.
 data Lex = Lex
-    { base      :: L.Text
-    , ctag      :: L.Text
+    { base      :: T.Text
+    , ctag      :: T.Text
     -- | Was it chosen while disambiguating?
     , disamb    :: Bool }
     deriving (Show)
 
+
+
+---------------------------------------------------------------------
+-- NER
+---------------------------------------------------------------------
+
+
+-- | Type of the NER function which has to be supplied to `nerXCES`.
+type NER = [(Tok, Word)] -> NeForest NE (Tok, Word)
+
+
+-- | NER XCES sentence.  Input NEs will be ignored.
+nerXCES :: Tagset -> NER -> Sent -> Sent
+nerXCES tagset ner =
+    let leaves = concatMap $ F.foldMap $ either (const []) (:[])
+    in  toXCES . ner . leaves . fromXCES tagset
 
 
 ---------------------------------------------------------------------
@@ -154,8 +139,20 @@ data Lex = Lex
 
 -- | Convert the XCES representation of a sentence into the internal
 -- representation used within Nerf.
-fromXCES :: Tagset -> NeForest a (Maybe Tok) -> NeForest a Word
-fromXCES tagset = rmNoF . tok2word tagset
+-- `Tok`ens are presereved in leaves so that it is easy to recover
+-- the original XCES version.
+fromXCES :: Tagset -> NeForest a (Maybe Tok) -> NeForest a (Tok, Word)
+fromXCES tagset = rmNoF . addWords tagset
+
+
+-- | Conversion back to XCES.
+toXCES :: NeForest a (Tok, Word) -> NeForest a (Maybe Tok)
+toXCES =
+    concatForestLeaves . mapForest (onLeaf f)
+  where
+    f (t, w) = if nps w
+        then [Nothing, Just t]
+        else [Just t]
 
 
 rmNoF :: NeForest a (Maybe b) -> NeForest a b
@@ -168,8 +165,8 @@ rmNoT (Node (Right (Just x)) _) = [Node (Right x) []]
 rmNoT (Node (Right Nothing) _)  = []
 
 
-tok2word :: Tagset -> NeForest a (Maybe Tok) -> NeForest a (Maybe Word)
-tok2word tagset =
+addWords :: Tagset -> NeForest a (Maybe Tok) -> NeForest a (Maybe (Tok, Word))
+addWords tagset =
     evalConv . mapM (R.mapM f)
   where
     f nd = case nd of
@@ -182,12 +179,12 @@ tok2word tagset =
             let Tok{..} = t
                 -- TODO: we take only the first disam MSD into account.
                 -- We could use the `Set` data structure instead.
-                w = Word {orth = L.toStrict orth, nps = _nps, msd = mkMSD lexs}
+                w = Word {orth = orth, nps = _nps, msd = mkMSD lexs}
             setNps False
-            return $ Right $ Just w
+            return $ Right $ Just (t, w)
     mkMSD = safeHead . mapMaybe fromLex
     fromLex Lex{..} = if disamb
-        then Just $ parseTag tagset $ L.toStrict ctag
+        then Just $ parseTag tagset ctag
         else Nothing
     safeHead (x:_) = Just x
     safeHead [] = Nothing
@@ -310,8 +307,8 @@ neTreeQ =
 
 
 -- | Get contexnts of the embedded text XML node.
-getTxt :: L.Text -> Q L.Text
-getTxt x = named x `joinR` first (node text)
+getTxt :: L.Text -> Q T.Text
+getTxt x = named x `joinR` first (L.toStrict <$> node text)
 
 
 -------------------------------------------------
@@ -401,14 +398,14 @@ lexToXML Lex{..} = mkNode "lex" atts
 
 
 mkNode
-    :: L.Text -> [TS.Attribute L.Text]
+    :: T.Text -> [TS.Attribute T.Text]
     -> Forest (Tag L.Text)
     -> Tree (Tag L.Text)
-mkNode x = Node . TagOpen x
+mkNode x = Node . fmap L.fromStrict . TagOpen x
 
 
-mkText :: L.Text -> Tree (Tag L.Text)
-mkText x = Node (TagText x) []
+mkText :: T.Text -> Tree (Tag L.Text)
+mkText x = Node (TagText $ L.fromStrict x) []
 
 
 breakLine :: Tree (Tag L.Text)
@@ -444,10 +441,10 @@ fromNKJP =
         else [Just tok]
       where
         tok = Tok
-            { orth  = orth
+            { orth  = L.toStrict orth
             , lexs  = concatMap (fromLex $ snd choice) lexs }
     fromLex ch NKJP.MX.Lex{..} =
-        [ Lex { base = base              , ctag = ctag'
+        [ Lex { base = L.toStrict base, ctag = L.toStrict ctag'
               , disamb = chBase == base && chCtag == ctag' }
         | (_, msd) <- msds
         , let msd' = if L.null msd then msd else L.cons ':' msd

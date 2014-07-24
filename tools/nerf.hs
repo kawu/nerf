@@ -30,8 +30,7 @@ import qualified Data.DAWG.Static as D
 -- Positional tagset
 import qualified Data.Tagset.Positional as P
 
-import           NLP.Nerf
-    (train, train', ner, tryOx, tryOx', saveModel, loadModel)
+import qualified NLP.Nerf as Nerf
 import           NLP.Nerf.Schema (defaultConf)
 import           NLP.Nerf.Dict
     ( extractPoliMorf, extractPNEG, extractNELexicon, extractProlexbase
@@ -46,7 +45,7 @@ import qualified NLP.Nerf.Compare as C
 import qualified NLP.Nerf.XCES2 as XCES2
 import qualified Data.Named.Tree as NETree
 import qualified Text.NKJP.Named as NKJP.NE
-import qualified Text.NKJP.Morphosyntax as NKJP.MX
+-- import qualified Text.NKJP.Morphosyntax as NKJP.MX
 
 import           Paths_nerf (version, getDataFileName)
 import           Data.Version (showVersion)
@@ -119,6 +118,7 @@ data Nerf
     , port          :: Int }
   | Client
     { format        :: Format
+    , tagsetPath    :: Maybe FilePath
     , host          :: String
     , port          :: Int }
   | Ox
@@ -193,6 +193,7 @@ serverMode = Server
 clientMode :: Nerf
 clientMode = Client
     { port   = portDefault &= help "Port number"
+    , tagsetPath = def &= typFile &= help "Tagset definition file"
     , host   = "localhost" &= help "Server host name"
     , format   = enum
         [ Text &= help "Raw text"
@@ -293,14 +294,14 @@ exec nerfArgs@Train{..} = do
 
     -- Format
     let doTrain = case format of
-            Text    -> train
-            XCES    -> train'
+            Text    -> Nerf.train
+            XCES    -> Nerf.train'
 
     -- Training proper
     nerf <- doTrain tagset sgdArgs cfg trainPath evalPath
     flip F.traverse_ outNerf $ \path -> do
         putStrLn $ "\nSaving model in " ++ path ++ "..."
-        saveModel path nerf
+        Nerf.saveModel path nerf
 
   where
     
@@ -331,11 +332,11 @@ exec nerfArgs@CV{..} = do
     forM_ (enumDivs parts) $ \(evalPath, trainPaths) -> do
         putStrLn $ "\nPart: " ++ evalPath
         withParts trainPaths $ \trainPath -> do
-            nerf <- train tagset sgdArgs cfg trainPath (Just evalPath)
+            nerf <- Nerf.train tagset sgdArgs cfg trainPath (Just evalPath)
             flip F.traverse_ outDir $ \dir -> do
                 let path = dir </> takeBaseName evalPath <.> ".bin"
                 putStrLn $ "\nSaving model in " ++ path ++ "..."
-                saveModel path nerf
+                Nerf.saveModel path nerf
   where
     sgdArgs = SGD.SgdArgs
         { SGD.batchSize = batchSize
@@ -346,33 +347,39 @@ exec nerfArgs@CV{..} = do
 
 
 exec NER{..} = do
-    nerf <- loadModel inModel
+    nerf <- Nerf.loadModel inModel
     case format of
         Text -> do
             inp  <- L.lines <$> L.getContents
             forM_ inp $ \sent -> do
-                let forest = ner nerf (L.unpack sent)
-                -- L.putStrLn (showForest forest)
+                let forest = Nerf.ner nerf (L.unpack sent)
                     simplify = NETree.mapForest . NETree.onNode $ T.pack . show
                 L.putStrLn . showForest $ simplify forest
-        XCES -> do
-            error "XCES format not supported for NER yet"
---             L.putStrLn . XCES.nerXCES (ner nerf) =<< L.getContents
---                   . 
---                   . XCES2.parseXCES
---                 =<< L.getContents
+        XCES -> L.putStrLn
+            . XCES2.showXCES
+            . (map . map) ( XCES2.nerXCES
+                (Nerf.tagset nerf)
+                (Nerf.nerX nerf snd) )
+            . XCES2.parseXCES
+            =<< L.getContents
 
 
 exec Server{..} = do
     putStr "Loading model..." >> hFlush stdout
-    nerf <- loadModel inModel
+    nerf <- Nerf.loadModel inModel
     nerf `seq` putStrLn " done"
     let portNum = N.PortNumber $ fromIntegral port
     putStrLn $ "Listening on port " ++ show port
     S.runNerfServer nerf portNum
 
 
-exec Client{..} = case format of
+exec Client{..} = do
+  -- Tagset
+  tagsetPath' <- case tagsetPath of
+      Nothing -> getDataFileName "config/nkjp-tagset.cfg"
+      Just x  -> return x     
+  tagset <- P.parseTagset tagsetPath' <$> readFile tagsetPath'
+  case format of
     Text -> do
         inp  <- L.lines <$> L.getContents
         forM_ inp $ \sent -> do
@@ -380,10 +387,13 @@ exec Client{..} = case format of
             let simplify = NETree.mapForest . NETree.onNode $ T.pack . show
             L.putStrLn . showForest $ simplify forest
             -- L.putStrLn (showForest forest)
-    XCES -> do
-        error "XCES format not supported for NER yet"
---         let nerRemote = unsafePerformIO . S.ner host portNum
---         L.putStrLn . XCES.nerXCES nerRemote =<< L.getContents
+    XCES -> L.putStrLn
+        . XCES2.showXCES
+        . (map . map) ( XCES2.nerXCES tagset
+            -- TODO: find a safer way to do this!
+            (unsafePerformIO . S.nerX host portNum snd) )
+        . XCES2.parseXCES
+        =<< L.getContents
   where
      portNum = N.PortNumber $ fromIntegral port
 
@@ -403,8 +413,8 @@ exec nerfArgs@Ox{..} = do
 
     -- Format
     let doOx = case format of
-            Text    -> tryOx
-            XCES    -> tryOx' tagset
+            Text    -> Nerf.tryOx
+            XCES    -> Nerf.tryOx' tagset
 
     -- Observation extraction proper
     doOx cfg dataPath
