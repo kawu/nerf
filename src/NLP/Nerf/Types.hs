@@ -1,3 +1,6 @@
+{-# LANGUAGE RecordWildCards #-}
+
+
 -- | Basic Nerf types.
 
 
@@ -10,8 +13,11 @@ module NLP.Nerf.Types
 ) where
 
 
+import           Control.Applicative
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
+-- import qualified Data.Binary as B
+import           Data.Binary (Binary, put, get)
 
 import qualified Data.Tagset.Positional as P
 import qualified Data.Named.IOB as IOB
@@ -30,6 +36,10 @@ data Word = Word {
     -- | Morphosyntactic description.
     , msd   :: Maybe P.Tag }
     deriving (Show)
+
+instance Binary Word where
+    put Word{..} = put orth >> put nps >> put msd
+    get = Word <$> get <*> get <*> get
 
 
 -- | A named entity.  It has a complex structure for the sake of flexibility.

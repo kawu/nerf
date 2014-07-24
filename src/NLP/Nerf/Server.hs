@@ -12,6 +12,7 @@ import           Control.Applicative ((<$>))
 import           Control.Monad (forever, void)
 import           Control.Concurrent (forkIO)
 import           System.IO (Handle, hFlush)
+import qualified Data.Text as T
 import qualified Data.Binary as B
 import qualified Data.ByteString.Lazy as BS
 import qualified Network as N
@@ -53,7 +54,8 @@ sockHandler nerf sock = do
 
 
 -- | Perform NER tagging on the input sentence.
-ner :: N.HostName -> N.PortID -> String -> IO (NeForest NE Word)
+-- ner :: N.HostName -> N.PortID -> String -> IO (NeForest NE Word)
+ner :: N.HostName -> N.PortID -> String -> IO (NeForest NE T.Text)
 ner host port inp = do
     handle <- N.connectTo host port
     -- putStrLn "Connection established"

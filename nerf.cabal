@@ -69,7 +69,7 @@ library
       , NLP.Nerf.Dict.NELexicon
       , NLP.Nerf.Dict.Prolexbase
       , NLP.Nerf.Compare
---       , NLP.Nerf.Server
+      , NLP.Nerf.Server
 --       , NLP.Nerf.XCES
       , NLP.Nerf.XCES2
       , NLP.Nerf.TEINKJP
