@@ -275,7 +275,7 @@ segQ =  (Just <$> tokQ)
 
 
 tokQ :: Q Tok
-tokQ = named "token" `joinR` (Tok
+tokQ = named "tok" `joinR` (Tok
     <$> first (getTxt "orth")
     <*> every' lexQ )
 
@@ -376,7 +376,7 @@ rootToXML (Node r xs) = case r of
     
 
 tokToXML :: Tok -> Tree (Tag L.Text)
-tokToXML Tok{..} = mkNode "token" []
+tokToXML Tok{..} = mkNode "tok" []
     $ sperse breakLine
     $ mkNode "orth" [] [mkText orth]
     : map lexToXML lexs

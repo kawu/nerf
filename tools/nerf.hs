@@ -47,6 +47,9 @@ import qualified Data.Named.Tree as NETree
 import qualified Text.NKJP.Named as NKJP.NE
 -- import qualified Text.NKJP.Morphosyntax as NKJP.MX
 
+-- Synchronization
+import qualified NLP.Nerf.Sync as Sync
+
 import           Paths_nerf (version, getDataFileName)
 import           Data.Version (showVersion)
 
@@ -134,7 +137,11 @@ data Nerf
     { dataPath      :: FilePath
     , dataPath'     :: FilePath }
   | NKJP2XCES
-    { nkjpPath      :: FilePath }
+    { nkjpPath      :: FilePath
+    , divPath       :: Maybe FilePath }
+  | Sync
+    { xcesPath1     :: FilePath
+    , xcesPath2     :: FilePath }
   deriving (Data, Typeable, Show)
 
 
@@ -222,13 +229,21 @@ cmpMode = Compare
 
 nkjp2xcesMode :: Nerf
 nkjp2xcesMode = NKJP2XCES
-    { nkjpPath  = def &= argPos 0 &= typ "NKJP.tar.bz2" }
+    { nkjpPath  = def &= argPos 0 &= typ "NCP"
+    , divPath = def &= typFile &= help
+        "A list of directories to process" }
+
+
+syncMode :: Nerf
+syncMode = Sync
+    { xcesPath1  = def &= argPos 0 &= typ "XCES`1"
+    , xcesPath2  = def &= argPos 1 &= typ "XCES`2" }
 
 
 argModes :: Mode (CmdArgs Nerf)
 argModes = cmdArgsMode $ modes
     [ trainMode, cvMode, nerMode, serverMode, clientMode
-    , cmpMode, oxMode, nkjp2xcesMode ]
+    , cmpMode, oxMode, nkjp2xcesMode, syncMode ]
     &= summary nerfDesc
     &= program "nerf"
 
@@ -436,9 +451,24 @@ exec Compare{..} = do
 
 
 exec NKJP2XCES{..} = do
-    nkjp <- NKJP.NE.readTrees nkjpPath
+    paths <- case divPath of
+        Just pt -> map L.unpack . L.lines <$> L.readFile pt
+        Nothing -> return []
+    nkjp <- NKJP.NE.readTrees paths nkjpPath
     let xces = map (map XCES2.fromNKJP) nkjp
     L.putStrLn $ XCES2.showXCES xces
+
+
+exec Sync{..} = do
+    xces1 <- XCES2.parseXCES <$> L.readFile xcesPath1 
+    xces2 <- XCES2.parseXCES <$> L.readFile xcesPath2
+    forM_ (zip xces1 xces2) $ \(par1, par2) -> do
+        putStrLn "=============="
+        let xs = Sync.sync Sync.xcesLen Sync.xcesLen par1 par2
+        forM_ xs $ \(x, y) -> do
+            print (length x, length y)
+        -- print $ sum $ map (length . fst) xs
+        -- print $ sum $ map (length . snd) xs
 
 
 -- readRaw :: FilePath -> IO [L.Text]

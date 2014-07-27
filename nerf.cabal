@@ -63,6 +63,7 @@ library
       , NLP.Nerf.Types
       , NLP.Nerf.Schema
       , NLP.Nerf.Tokenize
+      , NLP.Nerf.Sync
       , NLP.Nerf.Dict
       , NLP.Nerf.Dict.Base
       , NLP.Nerf.Dict.PNEG
