@@ -19,6 +19,8 @@ module NLP.Nerf.Sync
 import qualified Data.Char as Char
 import qualified Data.Text as T
 import qualified Data.Map.Strict as M
+import           Data.List (sortBy)
+import           Data.Ord (comparing)
 
 import           Data.Named.Tree
 
@@ -28,6 +30,8 @@ import qualified NLP.Nerf.XCES2 as XCES
 import           NLP.Nerf.ID
 import           NLP.Nerf.NeSet
 import           NLP.Nerf.Utils
+
+import           Debug.Trace (trace)
 
 
 ---------------------------------------------------------------
@@ -74,20 +78,35 @@ mkTMap sc = M.fromList
     safeMax xs = maximum xs
 
 
--- | Replace identifiers.
+-- | Replace identifiers.  This is more tricky than one would think.
+-- We have to be careful to not to remove NEs which have the same
+-- span.
+-- For the very same reason the function takes `NeSet [a] _` as
+-- arguments and not `NeSet a _`.
+--
+-- TODO: Move to NeSet module.
 replIDs
     :: TMap b c
-    -> NeSet a b
-    -> NeSet a c
-replIDs tMap neSet = M.fromList 
+    -> NeSet [a] b
+    -> NeSet [a] c
+-- replIDs tMap neSet = M.fromListWith (++)
+--     [ ((p', q'), xs)
+--     | ((p, q), xs) <- M.toList neSet
+--     , let p' = fst $ lkup p tMap
+--     , let q' = snd $ lkup q tMap ]
+replIDs tMap neSet = M.fromListWith (++)
     [ ((p', q'), xs)
-    | ((p, q), xs) <- M.toList neSet
+    | (p, q, xs) <- neList
     , let p' = fst $ lkup p tMap
     , let q' = snd $ lkup q tMap ]
   where
     lkup x m  = case M.lookup x m of
         Nothing -> error "Nerf.Sync.replIDs: no key"
         Just y  -> y
+    neList = sortBy (comparing proxy)
+        [ (p, q, xs)
+        | ((p, q), xs) <- M.toList neSet ]
+    proxy (p, q, _) = (q - p, p)
 
 
 ---------------------------------------------------------------
@@ -99,16 +118,17 @@ replIDs tMap neSet = M.fromList
 -- It is assumed, that both arguments represent the same sentence.
 syncNeForest
     :: forall a b c
-    .  (b -> Int)
+    .  (Show a, Show b)
+    => (b -> Int)
     -> (c -> Int)
     -> NeForest a b
     -> [c]
     -> NeForest a c
 syncNeForest seg1Len seg2Len sent tok2 =
 
-    unidForest tok2IDMap
-        $ flattenForest
-        $ toNeForest (M.keysSet tok2IDMap) neSet
+    -- trace (show $ toNeSet sentID) result
+    -- trace (show $ replIDs syncMap $ toNeSet sentID) result
+    trace (show neSet) result
 
   where
 
@@ -126,7 +146,12 @@ syncNeForest seg1Len seg2Len sent tok2 =
     -- NE set representation with new identifiers
     neSet = resolveOverlap (M.keysSet tok2IDMap)
           $ replIDs syncMap
-          $ fromNeForest sentID             :: NeSet [a] c
+          $ toNeSet sentID                  :: NeSet [a] c
+
+    -- | The result.
+    result = unidForest tok2IDMap
+        $ flattenForest
+        $ fromNeSet (M.keysSet tok2IDMap) neSet
 
 
 ---------------------------------------------------------------

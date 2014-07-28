@@ -5,14 +5,23 @@
 
 
 module NLP.Nerf.NeSet
-( NeSet
-, fromNeForest
-, toNeForest
-, resolveOverlap
+(
+-- * NeSet
+  NeSet
+, toNeSet
+, fromNeSet
+
+-- * NeMap
+, NeMap
+, toNeMap
+, fromNeMap
 
 -- * Flatten
 , flattenForest
 , flattenTree
+
+-- * Resolve overlapping
+, resolveOverlap
 ) where
 
 
@@ -31,8 +40,8 @@ type NeSet a b = M.Map (ID b, ID b) a
 
 
 -- | Transform NE forest to the set representation.
-fromNeForest :: NeForest a (ID b) -> NeSet [a] b
-fromNeForest =
+toNeSet :: NeForest a (ID b) -> NeSet [a] b
+toNeSet =
     -- toList . fst . fromForest
     fst . fromForest
   where
@@ -48,8 +57,8 @@ fromNeForest =
 
 
 -- | Transfrom NE set representation to NE forest.
-toNeForest :: forall a b. S.Set (ID b) -> NeSet a b -> NeForest a (ID b)
-toNeForest idSet =
+fromNeSet :: forall a b. S.Set (ID b) -> NeSet a b -> NeForest a (ID b)
+fromNeSet idSet =
     consumeForest . toNeList idSet
   where
     -- | Consume NE forest from the list.
@@ -60,7 +69,7 @@ toNeForest idSet =
         in  t : consumeForest ys
     -- | Consume NE tree from the list.
     consumeTree :: NeList a b -> (NeTree a (ID b), NeList a b)
-    consumeTree [] = error "Nerf.NeSet.toNeForest.consumeTree: empty list"
+    consumeTree [] = error "Nerf.NeSet.fromNeSet.consumeTree: empty list"
     consumeTree (ne@(Left (_, _, x)) : elems) =
         let (children, rest)  = L.span (`within` ne) elems
         in  (Node (Left x) (consumeForest children), rest)
@@ -133,8 +142,15 @@ fromNeMap neMap = M.fromList
     , (q, x) <- M.toList m ]
 
 
+-- | NEs beginning on the given position.
+begOn :: ID b -> NeMap a b -> [(ID b, a)]
+begOn k neMap = case M.lookup k neMap of
+    Just y  -> M.toList y
+    Nothing -> []
+
+
 -- | Resolve overlapping cases from the given NE set.
-resolveOverlap :: forall a b. S.Set (ID b) -> NeSet a b -> NeSet a b
+resolveOverlap :: forall a b. S.Set (ID b) -> NeSet [a] b -> NeSet [a] b
 resolveOverlap idSet neSet =
 
     fromNeMap $ go $ S.toAscList idSet
@@ -142,40 +158,28 @@ resolveOverlap idSet neSet =
   where
 
     -- | Alternative representation of the NE set.
-    neMap0 :: NeMap a b
+    neMap0 :: NeMap [a] b
     neMap0 = toNeMap neSet
 
     -- | Recursive computation.
-    go :: [ID b] -> NeMap a b
+    go :: [ID b] -> NeMap [a] b
     go (k:ks) =
         M.insert k go_k go_ks
       where
         go_ks = go ks
-        go_k  = M.fromList
+        go_k  = M.fromListWith (++)
             [ (q', x)
             | (q , x) <- begOn k neMap0
             , let q' = resolve k q go_ks ]
     go [] = M.empty
 
-    -- | NEs beginning on the given position.
-    begOn :: ID b -> NeMap a b -> [(ID b, a)]
-    -- begOn k neMap = M.toList $ lkup k neMap
-    begOn k neMap = case M.lookup k neMap of
-        Just y  -> M.toList y
-        Nothing -> []
-
     -- | Determine final position of the NE so that it will not
     -- overlap with any other existing (on positions starting
     -- with k+1) names.
-    resolve :: ID b -> ID b -> NeMap a b -> ID b
+    resolve :: ID b -> ID b -> NeMap [a] b -> ID b
     resolve p q neMap = max q $ maximumDef q
         [ maximumDef q $ map fst $ begOn k neMap
         | k <- [p+1 .. q] ]
-
---     -- | Just a safe version of the M.! function.
---     lkup x m  = case M.lookup x m of
---         Nothing -> error "Nerf.NeSet.resolveOverlap: no key"
---         Just y  -> y
 
 
 ---------------------------------------------------------------

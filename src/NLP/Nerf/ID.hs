@@ -22,7 +22,7 @@ import           Data.Named.Tree
 -- | Token identifier with dummy parameter representing the
 -- type of the original token.
 newtype ID a = ID { unID :: Int }
-    deriving (Eq, Ord, Enum, Num)
+    deriving (Show, Eq, Ord, Enum, Num)
 
 
 -- | ID map.
