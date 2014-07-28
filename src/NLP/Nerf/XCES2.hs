@@ -17,6 +17,7 @@ module NLP.Nerf.XCES2
 , Sent
 , Tok (..)
 , Lex (..)
+, NE
 
 -- * Parsing
 , parseXCES

@@ -49,6 +49,7 @@ import qualified Text.NKJP.Named as NKJP.NE
 
 -- Synchronization
 import qualified NLP.Nerf.Sync as Sync
+import qualified NLP.Nerf.Utils as Util
 
 import           Paths_nerf (version, getDataFileName)
 import           Data.Version (showVersion)
@@ -236,8 +237,8 @@ nkjp2xcesMode = NKJP2XCES
 
 syncMode :: Nerf
 syncMode = Sync
-    { xcesPath1  = def &= argPos 0 &= typ "XCES`1"
-    , xcesPath2  = def &= argPos 1 &= typ "XCES`2" }
+    { xcesPath1  = def &= argPos 0 &= typ "XCES-NE"
+    , xcesPath2  = def &= argPos 1 &= typ "XCES-SG" }
 
 
 argModes :: Mode (CmdArgs Nerf)
@@ -463,12 +464,15 @@ exec Sync{..} = do
     xces1 <- XCES2.parseXCES <$> L.readFile xcesPath1 
     xces2 <- XCES2.parseXCES <$> L.readFile xcesPath2
     forM_ (zip xces1 xces2) $ \(par1, par2) -> do
-        putStrLn "=============="
-        let xs = Sync.sync Sync.xcesLen Sync.xcesLen par1 par2
+        putStrLn "################################"
+        let xs = Sync.sync Sync.sentLen Sync.sentLen par1 par2
         forM_ xs $ \(x, y) -> do
-            print (length x, length y)
-        -- print $ sum $ map (length . fst) xs
-        -- print $ sum $ map (length . snd) xs
+            let nes  = concat x
+                toks = concatMap Util.leaves $ concat y
+                nes' = Sync.syncSent nes toks
+            L.putStrLn $ XCES2.showXCES [[nes']]
+                
+            -- print (length x, length y)
 
 
 -- readRaw :: FilePath -> IO [L.Text]
