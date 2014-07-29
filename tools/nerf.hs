@@ -41,7 +41,7 @@ import qualified NLP.Nerf.Server as S
 import           NLP.Nerf.Compare ((.+.))
 import qualified NLP.Nerf.Compare as C
 
--- For the NKJP2XCES mode:
+-- For the TEI2XCES mode:
 import qualified NLP.Nerf.XCES2 as XCES2
 import qualified Data.Named.Tree as NETree
 import qualified Text.NKJP.Named as NKJP.NE
@@ -137,7 +137,7 @@ data Nerf
   | Compare
     { dataPath      :: FilePath
     , dataPath'     :: FilePath }
-  | NKJP2XCES
+  | TEI2XCES
     { nkjpPath      :: FilePath
     , divPath       :: Maybe FilePath }
   | Sync
@@ -228,8 +228,8 @@ cmpMode = Compare
     , dataPath' = def &= argPos 1 &= typ "COMPARED" }
 
 
-nkjp2xcesMode :: Nerf
-nkjp2xcesMode = NKJP2XCES
+tei2xcesMode :: Nerf
+tei2xcesMode = TEI2XCES
     { nkjpPath  = def &= argPos 0 &= typ "NCP"
     , divPath = def &= typFile &= help
         "A list of directories to process" }
@@ -244,7 +244,7 @@ syncMode = Sync
 argModes :: Mode (CmdArgs Nerf)
 argModes = cmdArgsMode $ modes
     [ trainMode, cvMode, nerMode, serverMode, clientMode
-    , cmpMode, oxMode, nkjp2xcesMode, syncMode ]
+    , cmpMode, oxMode, tei2xcesMode, syncMode ]
     &= summary nerfDesc
     &= program "nerf"
 
@@ -451,7 +451,7 @@ exec Compare{..} = do
         putStrLn $ "false negative: "   ++ show (C.fn stats)
 
 
-exec NKJP2XCES{..} = do
+exec TEI2XCES{..} = do
     paths <- case divPath of
         Just pt -> map L.unpack . L.lines <$> L.readFile pt
         Nothing -> return []
