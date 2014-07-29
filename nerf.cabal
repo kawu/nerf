@@ -76,6 +76,11 @@ library
       , NLP.Nerf.XCES2
       , NLP.Nerf.TEINKJP
 
+    other-modules:
+        NLP.Nerf.ID
+      , NLP.Nerf.NeSet
+      , NLP.Nerf.Utils
+
     ghc-options: -Wall -O2
 
 source-repository head
