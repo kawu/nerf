@@ -40,12 +40,12 @@ module NLP.Nerf.XCES2
 
 import           Control.Applicative
 -- import           Control.Monad (void)
-import           Control.Arrow (second)
+-- import           Control.Arrow (second)
 import qualified Control.Monad.State.Strict as St
 import           Data.String (IsString)
 import           Data.Maybe (catMaybes, mapMaybe)
 -- import           Data.List (intersperse)
-import qualified Data.Set as S
+-- import qualified Data.Set as S
 import qualified Data.Map.Strict as M
 import qualified Data.Foldable as F
 import qualified Data.Traversable as R
@@ -426,7 +426,6 @@ sperse y [] = [y]
 
 
 -- | Construct `Root t` from a NKJP sentence.
--- TODO: include <ns> markers.
 fromNKJP
     :: NeForest (NKJP.NE.NE L.Text) (NKJP.MX.Seg L.Text)
     -> NeForest NE (Maybe Tok)
@@ -437,17 +436,18 @@ fromNKJP =
         [ Just (neTypeS, L.toStrict neType)
         , (neSubTypeS,) . L.toStrict <$> subType
         , (neDerivTypeS,) . L.toStrict . NKJP.NE.derivType <$> derived ]
-    g NKJP.MX.Seg{..} = if nps
+    g seg@NKJP.MX.Seg{..} = if nps
         then [Nothing, Just tok]
         else [Just tok]
       where
         tok = Tok
             { orth  = L.toStrict orth
-            , lexs  = concatMap (fromLex $ snd choice) lexs }
-    fromLex ch NKJP.MX.Lex{..} =
-        [ Lex { base = L.toStrict base, ctag = L.toStrict ctag'
-              , disamb = chBase == base && chCtag == ctag' }
+            , lexs  = concatMap (fromLex $ NKJP.MX.chosen seg) lexs }
+    fromLex (chBase, chTag, chMsd) NKJP.MX.Lex{..} =
+        [ Lex { base = L.toStrict base
+              , ctag = L.toStrict tag
+              , disamb = chBase == base
+                      && chTag == ctag
+                      && chMsd == msd }
         | (_, msd) <- msds
-        , let msd' = if L.null msd then msd else L.cons ':' msd
-        , let ctag' = L.append ctag msd' ]
-        where (chBase, chCtag) = second L.tail $ L.break (==':') ch
+        , let tag = L.intercalate ":" $ filter (not . L.null) [ctag, msd] ]

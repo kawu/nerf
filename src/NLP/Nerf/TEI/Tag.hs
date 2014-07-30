@@ -11,7 +11,7 @@ module NLP.Nerf.TEI.Tag
 
 
 import           Control.Applicative
-import           Control.Monad (when, forM_)
+import           Control.Monad (forM_)
 import qualified Control.Monad.LazyIO as LazyIO
 import qualified System.Directory as Dir
 import           System.FilePath ((</>))
@@ -37,22 +37,42 @@ tagCorpus
 tagCorpus nerf srcRoot dstRoot = do
     paths <- walkDir srcRoot
     forM_ paths $ \path -> do
-        let srcName = "ann_morphosyntax.xml.gz"
-            dstName = "ann_named.xml.gz"
-            srcPath = srcRoot </> path </> srcName
-            dstPath = dstRoot </> path </> dstName
-        b <- Dir.doesFileExist srcPath
-        when b $ do
+        let srcPath = srcRoot </> path </> "ann_morphosyntax.xml"
+            sgzPath = srcRoot </> path </> "ann_morphosyntax.xml.gz"
+            dstPath = dstRoot </> path </> "ann_named.xml.gz"
+        -- b <- Dir.doesFileExist srcPath
+        -- when b $ do
+        srcData <- readBytes srcPath
+        sgzData <- readBytes sgzPath
+        let finData = srcData <|> fmap GZip.decompress sgzData
+        just finData $ \morphData -> do
             putStrLn $ "> " ++ dstPath
             Dir.createDirectoryIfMissing True $ dstRoot </> path
-            morph <- X.parseMorph . L.decodeUtf8 . GZip.decompress
-                 <$> ByteString.readFile srcPath
-            let tagset = Nerf.tagset nerf
+            -- morph <- X.parseMorph . L.decodeUtf8 . GZip.decompress
+            --      <$> ByteString.readFile srcPath
+            let morph = X.parseMorph $ L.decodeUtf8 morphData
+                tagset = Nerf.tagset nerf
                 ner = Nerf.nerX nerf (TEI.toWord tagset . fmap L.toStrict)
                 named = map (TEI.nerPara ner) morph
             ByteString.writeFile dstPath
                 . GZip.compress . L.encodeUtf8
                 $ TEI.showTEI named
+
+
+-- | Read ann_morphosyntax.xml file from the given directory, gzipped or not.
+-- readMorph :: FilePath -> Maybe [X.Para L.Text]
+readBytes :: FilePath -> IO (Maybe ByteString.ByteString)
+readBytes path = do
+    b <- Dir.doesFileExist path
+    if b
+        then Just <$> ByteString.readFile path
+        else return Nothing
+
+
+just :: Maybe a -> (a -> IO ()) -> IO ()
+just (Just x) f = f x
+just Nothing _ = return ()
+        
 
 ---------------------
 -- Walk directory

@@ -19,8 +19,9 @@ module NLP.Nerf.TEI
 
 
 import           Control.Applicative
-import           Control.Arrow (second)
+-- import           Control.Arrow (second)
 import           Data.Foldable (foldMap)
+import           Data.Maybe (catMaybes)
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as L
@@ -81,14 +82,13 @@ import           NLP.Nerf.Types
 
 -- | Convert a TEI segment to a Nerf `Word`.
 toWord :: Tagset -> X.Seg T.Text -> Word
-toWord tagset X.Seg{..} = Word
+toWord tagset seg@X.Seg{..} = Word
     { orth  = orth
     , nps   = nps
-    , msd   = Just $ mkMSD $ snd choice }
+    , msd   = Just $ parseTag tagset tag }
   where
-    mkMSD x = 
-        let (_base, tag) = second T.tail $ T.break (==':') x
-        in  parseTag tagset tag
+    tag = T.intercalate ":" $ filter (not . T.null) [ctag, msdp]
+    (_, ctag, msdp) = X.chosen seg
 
 
 --------------------
@@ -242,11 +242,18 @@ nameToXML ne@N.NE{..} = mkNode "seg" [("xml:id", neID)]
 
 nameToFS :: N.NE L.Text -> Tree (Tag L.Text)
 nameToFS N.NE{..} = mkNode "fs" [("type", "named")]
-    [breakLine, neTypeToXML neType, breakLine]
+    $ sperse breakLine $ catMaybes
+    [ Just $ neAttrToXML "type" neType
+    , neAttrToXML "subtype" <$> subType
+    , neAttrToXML "derivtype" . N.derivType <$> derived ]
 
 
-neTypeToXML :: L.Text -> Tree (Tag L.Text)
-neTypeToXML x = mkNode "f" [("name", "type")]
+-- neTypeToXML :: L.Text -> Tree (Tag L.Text)
+-- neTypeToXML = neAttrToXML "type"
+
+
+neAttrToXML :: L.Text -> L.Text -> Tree (Tag L.Text)
+neAttrToXML attr x = mkNode "f" [("name", attr)]
     [ breakLine
     , mkNode "symbol" [("value", x)] []
     , breakLine ]
