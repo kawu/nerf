@@ -44,7 +44,7 @@ tagCorpus nerf srcRoot dstRoot = do
         b <- Dir.doesFileExist srcPath
         when b $ do
             putStrLn $ "> " ++ dstPath
-            Dir.createDirectoryIfMissing $ dstRoot </> path
+            Dir.createDirectoryIfMissing True $ dstRoot </> path
             morph <- X.parseMorph . L.decodeUtf8 . GZip.decompress
                  <$> ByteString.readFile srcPath
             let tagset = Nerf.tagset nerf
