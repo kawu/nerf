@@ -57,6 +57,7 @@ library
       , IntervalMap         >= 0.3      && < 0.4
       , tagset-positional   >= 0.3      && < 0.4
       , zlib                >= 0.5      && < 0.6
+      , lazy-io             >= 0.1      && < 0.2
 
     exposed-modules:
         NLP.Nerf
@@ -74,7 +75,8 @@ library
       , NLP.Nerf.Server
 --       , NLP.Nerf.XCES
       , NLP.Nerf.XCES2
-      , NLP.Nerf.TEINKJP
+      , NLP.Nerf.TEI
+      , NLP.Nerf.TEI.Tag
 
     other-modules:
         NLP.Nerf.ID

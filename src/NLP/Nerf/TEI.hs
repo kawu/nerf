@@ -2,12 +2,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 
--- | Suport for tagging TEI NKJP ann_morphosyntax files.
+-- | Suport for tagging TEI ann_morphosyntax.xml files.
 
 
-module NLP.Nerf.TEINKJP
+module NLP.Nerf.TEI
 ( nerPara
 , nerSent
+, toWord
 
 -- -- * Dummy
 -- , dummyNER
@@ -18,9 +19,10 @@ module NLP.Nerf.TEINKJP
 
 
 import           Control.Applicative
+import           Control.Arrow (second)
 import           Data.Foldable (foldMap)
 import qualified Data.Map.Strict as M
--- import qualified Data.Text as T
+import qualified Data.Text as T
 import qualified Data.Text.Lazy as L
 import           Data.String (IsString)
 import qualified Control.Monad.State.Strict as S
@@ -31,6 +33,7 @@ import           Text.XML.PolySoup (renderTree)
 
 -- import qualified Data.Named.Tree as N
 import           Data.Named.Tree
+import           Data.Tagset.Positional (Tagset, parseTag)
 
 import qualified Text.NKJP.Morphosyntax as X
 import qualified Text.NKJP.Named as N
@@ -54,6 +57,38 @@ import           NLP.Nerf.Types
 -----------------------------------------------------------
 -- NER on TEI NKJP
 -----------------------------------------------------------
+
+
+-- -- | A morphosyntactic segment.
+-- data Word = Word {
+--     -- | An orthographic form,
+--       orth  :: Orth
+--     -- | No preceding space.
+--     , nps   :: Bool
+--     -- | Morphosyntactic description.
+--     , msd   :: Maybe P.Tag }
+--     deriving (Show)
+--
+-- 
+-- Seg t = Seg
+--     { segID     :: t 
+--     , orth      :: t
+--     , nps       :: Bool
+--     , lexs      :: [Lex t]
+--     , choice    :: (t, t) }
+--     deriving (Show, Functor)
+
+
+-- | Convert a TEI segment to a Nerf `Word`.
+toWord :: Tagset -> X.Seg T.Text -> Word
+toWord tagset X.Seg{..} = Word
+    { orth  = orth
+    , nps   = nps
+    , msd   = Just $ mkMSD $ snd choice }
+  where
+    mkMSD x = 
+        let (_base, tag) = second T.tail $ T.break (==':') x
+        in  parseTag tagset tag
 
 
 --------------------

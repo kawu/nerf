@@ -37,6 +37,7 @@ import           NLP.Nerf.Dict
     , extractIntTriggers, extractExtTriggers, Dict )
 -- import           NLP.Nerf.XCES as XCES
 import qualified NLP.Nerf.Server as S
+import           NLP.Nerf.TEI.Tag as TEI
 
 import           NLP.Nerf.Compare ((.+.))
 import qualified NLP.Nerf.Compare as C
@@ -117,6 +118,10 @@ data Nerf
   | NER
     { inModel       :: FilePath
     , format        :: Format }
+  | TagTEI
+    { inModel       :: FilePath
+    , srcPath       :: FilePath
+    , dstPath       :: FilePath }
   | Server
     { inModel       :: FilePath
     , port          :: Int }
@@ -138,7 +143,7 @@ data Nerf
     { dataPath      :: FilePath
     , dataPath'     :: FilePath }
   | TEI2XCES
-    { nkjpPath      :: FilePath
+    { teiPath       :: FilePath
     , divPath       :: Maybe FilePath }
   | Sync
     { xcesPath1     :: FilePath
@@ -191,6 +196,12 @@ nerMode = NER
         [ Text &= help "Raw text"
         , XCES &= help "XCES" ] }
 
+tagTEIMode :: Nerf
+tagTEIMode = TagTEI
+    { inModel = def &= argPos 0 &= typ "MODEL-FILE"
+    , srcPath = def &= argPos 1 &= typ "TEI-CORPUS"
+    , dstPath = def &= argPos 2 &= typ "OUTPUT-DIR" }
+
 
 serverMode :: Nerf
 serverMode = Server
@@ -230,7 +241,7 @@ cmpMode = Compare
 
 tei2xcesMode :: Nerf
 tei2xcesMode = TEI2XCES
-    { nkjpPath  = def &= argPos 0 &= typ "NCP"
+    { teiPath = def &= argPos 0 &= typ "TEI-CORPUS"
     , divPath = def &= typFile &= help
         "A list of directories to process" }
 
@@ -243,7 +254,7 @@ syncMode = Sync
 
 argModes :: Mode (CmdArgs Nerf)
 argModes = cmdArgsMode $ modes
-    [ trainMode, cvMode, nerMode, serverMode, clientMode
+    [ trainMode, cvMode, nerMode, tagTEIMode, serverMode, clientMode
     , cmpMode, oxMode, tei2xcesMode, syncMode ]
     &= summary nerfDesc
     &= program "nerf"
@@ -380,6 +391,11 @@ exec NER{..} = do
             =<< L.getContents
 
 
+exec TagTEI{..} = do
+    nerf <- Nerf.loadModel inModel
+    TEI.tagCorpus nerf srcPath dstPath
+
+
 exec Server{..} = do
     putStr "Loading model..." >> hFlush stdout
     nerf <- Nerf.loadModel inModel
@@ -455,7 +471,7 @@ exec TEI2XCES{..} = do
     paths <- case divPath of
         Just pt -> map L.unpack . L.lines <$> L.readFile pt
         Nothing -> return []
-    nkjp <- NKJP.NE.readTrees paths nkjpPath
+    nkjp <- NKJP.NE.readTrees paths teiPath
     let xces = map (map XCES2.fromNKJP) nkjp
     L.putStrLn $ XCES2.showXCES xces
 
