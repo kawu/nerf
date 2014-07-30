@@ -41,6 +41,8 @@ tagCorpus nerf srcRoot dstRoot = do
             dstName = "ann_named.xml.gz"
             srcPath = srcRoot </> path </> srcName
             dstPath = dstRoot </> path </> dstName
+        putStrLn srcPath
+        putStrLn dstPath
         b <- Dir.doesFileExist srcPath
         when b $ do
             putStrLn $ "> " ++ dstPath
@@ -69,12 +71,11 @@ doWalk
     -> FilePath     -- ^ Path to walk
     -> IO [FilePath]
 doWalk root path = do
-    let x = root </> path
-    b <- Dir.doesDirectoryExist x
+    b <- Dir.doesDirectoryExist $ root </> path
     if b then ( do
-        cs <- listDir x
+        cs <- listDir $ root </> path
         xs <- concat <$> LazyIO.mapM (doWalk root . (path </>)) cs
-        return $ x : xs )
+        return $ path : xs )
         else return []
 
 
