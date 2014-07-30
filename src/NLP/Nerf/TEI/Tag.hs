@@ -41,11 +41,10 @@ tagCorpus nerf srcRoot dstRoot = do
             dstName = "ann_named.xml.gz"
             srcPath = srcRoot </> path </> srcName
             dstPath = dstRoot </> path </> dstName
-        putStrLn srcPath
-        putStrLn dstPath
         b <- Dir.doesFileExist srcPath
         when b $ do
             putStrLn $ "> " ++ dstPath
+            Dir.createDirectoryIfMissing $ dstRoot </> path
             morph <- X.parseMorph . L.decodeUtf8 . GZip.decompress
                  <$> ByteString.readFile srcPath
             let tagset = Nerf.tagset nerf
