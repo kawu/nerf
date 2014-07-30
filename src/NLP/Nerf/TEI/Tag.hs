@@ -11,7 +11,7 @@ module NLP.Nerf.TEI.Tag
 
 
 import           Control.Applicative
-import           Control.Monad (forM_)
+import           Control.Monad (when, forM_)
 import qualified Control.Monad.LazyIO as LazyIO
 import qualified System.Directory as Dir
 import           System.FilePath ((</>))
@@ -41,14 +41,17 @@ tagCorpus nerf srcRoot dstRoot = do
             dstName = "ann_named.xml.gz"
             srcPath = srcRoot </> path </> srcName
             dstPath = dstRoot </> path </> dstName
-        morph <- X.parseMorph . L.decodeUtf8 . GZip.decompress
-             <$> ByteString.readFile srcPath
-        let tagset = Nerf.tagset nerf
-            ner = Nerf.nerX nerf (TEI.toWord tagset . fmap L.toStrict)
-            named = map (TEI.nerPara ner) morph
-        ByteString.writeFile dstPath
-            . GZip.compress . L.encodeUtf8
-            $ TEI.showTEI named
+        b <- Dir.doesFileExist srcPath
+        when b $ do
+            putStrLn $ "> " ++ dstPath
+            morph <- X.parseMorph . L.decodeUtf8 . GZip.decompress
+                 <$> ByteString.readFile srcPath
+            let tagset = Nerf.tagset nerf
+                ner = Nerf.nerX nerf (TEI.toWord tagset . fmap L.toStrict)
+                named = map (TEI.nerPara ner) morph
+            ByteString.writeFile dstPath
+                . GZip.compress . L.encodeUtf8
+                $ TEI.showTEI named
 
 ---------------------
 -- Walk directory
@@ -66,8 +69,13 @@ doWalk
     -> FilePath     -- ^ Path to walk
     -> IO [FilePath]
 doWalk root path = do
-    xs <- listDir $ root </> path
-    concat <$> LazyIO.mapM (doWalk root . (path </>)) xs
+    let x = root </> path
+    b <- Dir.doesDirectoryExist x
+    if b then ( do
+        cs <- listDir x
+        xs <- concat <$> LazyIO.mapM (doWalk root . (path </>)) cs
+        return $ x : xs )
+        else return []
 
 
 -- | List the given directory.
