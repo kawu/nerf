@@ -40,16 +40,12 @@ tagCorpus nerf srcRoot dstRoot = do
         let srcPath = srcRoot </> path </> "ann_morphosyntax.xml"
             sgzPath = srcRoot </> path </> "ann_morphosyntax.xml.gz"
             dstPath = dstRoot </> path </> "ann_named.xml.gz"
-        -- b <- Dir.doesFileExist srcPath
-        -- when b $ do
         srcData <- readBytes srcPath
         sgzData <- readBytes sgzPath
         let finData = srcData <|> fmap GZip.decompress sgzData
         just finData $ \morphData -> do
             putStrLn $ "> " ++ dstPath
             Dir.createDirectoryIfMissing True $ dstRoot </> path
-            -- morph <- X.parseMorph . L.decodeUtf8 . GZip.decompress
-            --      <$> ByteString.readFile srcPath
             let morph = X.parseMorph $ L.decodeUtf8 morphData
                 tagset = Nerf.tagset nerf
                 ner = Nerf.nerX nerf (TEI.toWord tagset . fmap L.toStrict)
