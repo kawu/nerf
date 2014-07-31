@@ -122,7 +122,8 @@ data Nerf
   | TagTEI
     { inModel       :: FilePath
     , srcPath       :: FilePath
-    , dstPath       :: FilePath }
+    , dstPath       :: FilePath
+    , override      :: Bool }
   | Server
     { inModel       :: FilePath
     , port          :: Int }
@@ -201,7 +202,8 @@ tagTEIMode :: Nerf
 tagTEIMode = TagTEI
     { inModel = def &= argPos 0 &= typ "MODEL-FILE"
     , srcPath = def &= argPos 1 &= typ "TEI-CORPUS"
-    , dstPath = def &= argPos 2 &= typ "OUTPUT-DIR" }
+    , dstPath = def &= argPos 2 &= typ "OUTPUT-DIR"
+    , override = False &= help "Override existing ann_named files" }
 
 
 serverMode :: Nerf
@@ -395,7 +397,7 @@ exec NER{..} = do
 exec TagTEI{..} = do
     n <- getNumCapabilities
     nerf <- Nerf.loadModel inModel
-    TEI.tagCorpus n nerf srcPath dstPath
+    TEI.tagCorpus n override nerf srcPath dstPath
 
 
 exec Server{..} = do
