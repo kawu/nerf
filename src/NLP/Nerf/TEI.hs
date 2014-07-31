@@ -36,6 +36,7 @@ import           Text.XML.PolySoup (renderTree)
 import           Data.Named.Tree
 import           Data.Tagset.Positional (Tagset, parseTag)
 
+import qualified Text.NKJP.Ptr as P
 import qualified Text.NKJP.Morphosyntax as X
 import qualified Text.NKJP.Named as N
 
@@ -105,7 +106,8 @@ nerPara
     -> X.Para L.Text                    -- ^ TEI NKJP morphosyntax paragraph
     -> N.Para L.Text                    -- ^ TEI NKJP "named" paragraph
 nerPara f X.Para{..} = N.Para
-    { paraID = paraID   -- TODO: set new identifier to the NE paragraph. 
+    { paraID    = namedID paraID
+    , paraPtr   = P.Global paraID "ann_morphosyntax.xml"
     , sentences = map (nerSent f) sentences }
 
 
@@ -116,13 +118,22 @@ nerSent
     -> X.Sent L.Text                    -- ^ TEI NKJP morphosyntax sentence
     -> N.Sent L.Text                    -- ^ TEI NKJP "named" sentence
 nerSent f X.Sent{..} = N.Sent
-    { sentID = sentID   -- TODO: set new identifier
-    , names = fromForest $ f segments  }
+    { sentID    = sentID'
+    , sentPtr   = P.Global sentID "ann_morphosyntax.xml"
+    , names     = fromForest sentID' $ f segments  }
+    where sentID' = namedID sentID
+
+
+-- | Make new ID from morphosyntax ID.
+namedID :: L.Text -> L.Text
+namedID x = case L.stripPrefix "morph" x of
+    Just y  -> L.append "named" y
+    Nothing -> L.append "named" x
 
 
 -- | Convert the forest of NEs to TEI NKJP representation. 
-fromForest :: NeForest NE (X.Seg L.Text) -> [N.NE L.Text]
-fromForest = internal . evalID . teiNeForest
+fromForest :: L.Text -> NeForest NE (X.Seg L.Text) -> [N.NE L.Text]
+fromForest sentID = internal . evalID sentID . teiNeForest
 
 
 -- | Convert NEs in a forest to the TEI NKJP representation.
@@ -141,7 +152,7 @@ teiNeTree (Node n ts) = case n of
         i <- newID
         ts' <- teiNeForest ts
         let n' = defNE
-                { N.neID = L.pack (show i)
+                { N.neID = i
                 , N.orth = getOrth ts
                 , N.neType = L.fromStrict
                     $ fromJust' "teiNeTree: unspecified neType"
@@ -160,9 +171,9 @@ teiNeTree (Node n ts) = case n of
 
 
 -- | Make pointer from a node.
-ptrFrom :: Either (N.NE L.Text) (X.Seg L.Text) -> N.Ptr L.Text
-ptrFrom (Left x) = N.Local (N.neID x)
-ptrFrom (Right x) = N.Global (X.segID x) "ann_morphosyntax.xml"
+ptrFrom :: Either (N.NE L.Text) (X.Seg L.Text) -> P.Ptr L.Text
+ptrFrom (Left x) = P.Local (N.neID x)
+ptrFrom (Right x) = P.Global (X.segID x) "ann_morphosyntax.xml"
 
 
 -- | Determine the `orth` value.
@@ -195,18 +206,30 @@ defNE = N.NE
 ----------------------------
 
 
+-- | State of the ID monad.
+data IDState = IDState
+    { currID    :: Int
+    , sentID    :: L.Text }
+
+
 -- | Factory of identifiers (monad).
-type ID = S.State Int
+type ID = S.State IDState
 
 
 -- | Evaluate the ID monad.
-evalID :: ID a -> a
-evalID = flip S.evalState 0
+evalID :: L.Text -> ID a -> a
+evalID x = flip S.evalState $ IDState 1 x
 
 
 -- | Get new ID.
-newID :: ID Int
-newID = S.state $ \x -> (x, x+1)
+newID :: ID L.Text
+newID = S.state $ \s ->
+    let i = currID s
+        mkID x = L.concat [x, ".", L.pack (show i), "-n"]
+        j = case L.stripSuffix "-s" (sentID s) of
+                Just y  -> mkID y
+                Nothing -> mkID $ sentID s
+    in  (j, s { currID = i + 1} )
 
 
 ----------------------------
@@ -258,31 +281,28 @@ epilog =
 -- | Convert TEI (NEs) to XML tree.
 teiToXML :: [N.Para L.Text] -> Tree (Tag L.Text)
 teiToXML xs = mkNode "body" []
-    -- (sperse breakLine $ map paraToXML xs)
     (map paraToXML xs)
 
 
 paraToXML :: N.Para L.Text -> Tree (Tag L.Text)
-paraToXML N.Para{..} = mkNode "p" [("xml:id", paraID)]
-    -- (sperse breakLine $ map sentToXML sentences)
+paraToXML N.Para{..} = mkNode "p"
+    [("corresp", P.showPtr paraPtr), ("xml:id", paraID)]
     (map sentToXML sentences)
 
 
 sentToXML :: N.Sent L.Text -> Tree (Tag L.Text)
-sentToXML N.Sent{..} = mkNode "s" [("xml:id", sentID)]
-    -- (sperse breakLine $ map nameToXML names)
+sentToXML N.Sent{..} = mkNode "s"
+    [("corresp", P.showPtr sentPtr), ("xml:id", sentID)]
     (map nameToXML names)
 
 
 nameToXML :: N.NE L.Text -> Tree (Tag L.Text)
 nameToXML ne@N.NE{..} = mkNode "seg" [("xml:id", neID)]
-    -- $ sperse breakLine
     $ nameToFS ne : map ptrToXML ptrs
 
 
 nameToFS :: N.NE L.Text -> Tree (Tag L.Text)
 nameToFS N.NE{..} = mkNode "fs" [("type", "named")]
-    -- $ sperse breakLine $ catMaybes
     $ catMaybes
     [ Just $ strToXML "orth" orth
     , Just $ symToXML "type" neType
@@ -300,13 +320,8 @@ strToXML attr x = mkNode "f" [("name", attr)]
     [mkNode "string" [] [mkText x]]
 
 
-ptrToXML :: N.Ptr L.Text -> Tree (Tag L.Text)
-ptrToXML x = mkNode "ptr" [("target", showPtr x)] []
-
-
-showPtr :: N.Ptr L.Text -> L.Text
-showPtr (N.Local x) = x
-showPtr (N.Global x y) = L.concat [y, "#", x]
+ptrToXML :: P.Ptr L.Text -> Tree (Tag L.Text)
+ptrToXML x = mkNode "ptr" [("target", P.showPtr x)] []
 
 
 -------------------------------------------------
