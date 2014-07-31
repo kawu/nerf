@@ -15,6 +15,7 @@ import           System.FilePath (takeBaseName, (</>), (<.>))
 import           Control.Applicative ((<$>), (<*>))
 import           Control.Arrow (second)
 import           Control.Monad (forM_)
+import           Control.Concurrent (getNumCapabilities)
 import           Data.Maybe (catMaybes)
 -- import           Data.Binary (encodeFile, decodeFile)
 import           Data.Text.Binary ()
@@ -392,8 +393,9 @@ exec NER{..} = do
 
 
 exec TagTEI{..} = do
+    n <- getNumCapabilities
     nerf <- Nerf.loadModel inModel
-    TEI.tagCorpus nerf srcPath dstPath
+    TEI.tagCorpus n nerf srcPath dstPath
 
 
 exec Server{..} = do
