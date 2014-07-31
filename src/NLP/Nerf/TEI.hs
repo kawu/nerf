@@ -213,36 +213,64 @@ internal = concatMap . foldMap $ either (:[]) (const [])
 
 -- | Convert TEI (NEs) into XML representation.
 showTEI :: [N.Para L.Text] -> L.Text
-showTEI =
-    let opts = TS.renderOptions { TS.optMinimize = const True }
-    in  TS.renderTagsOptions opts . renderTree . teiToXML
+showTEI
+    = addProlog . addEpilog . TS.renderTagsOptions opts 
+    . renderTree . prettify " " "   " . teiToXML
+  where
+    opts = TS.renderOptions { TS.optMinimize = const True }
+    addProlog = (L.append prolog)
+    addEpilog = (`L.append` epilog)
+
+
+-- | Prolog.
+prolog :: L.Text
+prolog =
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+    \<teiCorpus xmlns=\"http://www.tei-c.org/ns/1.0\" xmlns:nkjp=\"http://www.nkjp.pl/ns/1.0\" xmlns:xi=\"http://www.w3.org/2001/XInclude\">\n\
+    \ <xi:include href=\"NKJP_1M_header.xml\"/>\n\
+    \ <TEI>\n\
+    \  <xi:include href=\"header.xml\"/>\n\
+    \  <text>\n\
+    \   "
+
+    
+-- | Epilog.
+epilog :: L.Text
+epilog =
+    "\n  </text>\n\
+    \ </TEI>\n\
+    \</teiCorpus>"
 
 
 -- | Convert TEI (NEs) to XML tree.
 teiToXML :: [N.Para L.Text] -> Tree (Tag L.Text)
 teiToXML xs = mkNode "body" []
-    (sperse breakLine $ map paraToXML xs)
+    -- (sperse breakLine $ map paraToXML xs)
+    (map paraToXML xs)
 
 
 paraToXML :: N.Para L.Text -> Tree (Tag L.Text)
 paraToXML N.Para{..} = mkNode "p" [("xml:id", paraID)]
-    (sperse breakLine $ map sentToXML sentences)
+    -- (sperse breakLine $ map sentToXML sentences)
+    (map sentToXML sentences)
 
 
 sentToXML :: N.Sent L.Text -> Tree (Tag L.Text)
 sentToXML N.Sent{..} = mkNode "s" [("xml:id", sentID)]
-    (sperse breakLine $ map nameToXML names)
+    -- (sperse breakLine $ map nameToXML names)
+    (map nameToXML names)
 
 
 nameToXML :: N.NE L.Text -> Tree (Tag L.Text)
 nameToXML ne@N.NE{..} = mkNode "seg" [("xml:id", neID)]
-    $ sperse breakLine
+    -- $ sperse breakLine
     $ nameToFS ne : map ptrToXML ptrs
 
 
 nameToFS :: N.NE L.Text -> Tree (Tag L.Text)
 nameToFS N.NE{..} = mkNode "fs" [("type", "named")]
-    $ sperse breakLine $ catMaybes
+    -- $ sperse breakLine $ catMaybes
+    $ catMaybes
     [ Just $ neAttrToXML "type" neType
     , neAttrToXML "subtype" <$> subType
     , neAttrToXML "derivtype" . N.derivType <$> derived ]
@@ -254,9 +282,10 @@ nameToFS N.NE{..} = mkNode "fs" [("type", "named")]
 
 neAttrToXML :: L.Text -> L.Text -> Tree (Tag L.Text)
 neAttrToXML attr x = mkNode "f" [("name", attr)]
-    [ breakLine
-    , mkNode "symbol" [("value", x)] []
-    , breakLine ]
+    [mkNode "symbol" [("value", x)] []]
+--     [ breakLine
+--     , mkNode "symbol" [("value", x)] []
+--     , breakLine ]
 
 
 ptrToXML :: N.Ptr L.Text -> Tree (Tag L.Text)
@@ -266,6 +295,38 @@ ptrToXML x = mkNode "ptr" [("target", showPtr x)] []
 showPtr :: N.Ptr L.Text -> L.Text
 showPtr (N.Local x) = x
 showPtr (N.Global x y) = L.concat [y, "#", x]
+
+
+-------------------------------------------------
+-- Prettify
+-------------------------------------------------
+
+
+-- -- | Pretify the tree.
+-- prettifyTree :: L.Text -> Tree (Tag L.Text) -> Tree (Tag L.Text)
+-- prettifyTree ind = preTree ind ""
+
+
+-- | Add break-lines and indentation.
+prettify
+    :: L.Text -> L.Text
+    -> Tree (Tag L.Text)
+    -> Tree (Tag L.Text)
+prettify ind acc t = case t of
+    Node x []   -> Node x []
+    Node x xs   -> Node x $
+        preForest ind acc xs
+
+
+-- | Add break-lines and indentation.
+preForest
+    :: L.Text -> L.Text
+    -> Forest (Tag L.Text)
+    -> Forest (Tag L.Text)
+preForest ind acc =
+    let acc' = L.append ind acc
+        brk = mkText . L.append "\n"
+    in  sperse' (brk acc') (brk acc) . map (prettify ind acc')
 
 
 -------------------------------------------------
@@ -283,12 +344,19 @@ mkText :: s -> Tree (Tag s)
 mkText x = Node (TagText x) []
 
 
-breakLine :: IsString s => Tree (Tag s)
-breakLine = mkText "\n"
+-- breakLine :: IsString s => Tree (Tag s)
+-- breakLine = mkText "\n"
+-- 
+-- 
+-- | Similar to `intersperse`, but adds the item at the beginning
+-- and at the end of the list as well.
+-- sperse y (x:xs) = y : x : sperse y xs 
+-- sperse y [] = [y]
 
 
 -- | Similar to `intersperse`, but adds the item at the beginning
--- and at the end of the list as well.
-sperse :: a -> [a] -> [a]
-sperse y (x:xs) = y : x : sperse y xs 
-sperse y [] = [y]
+-- and at the end of the list as well.  The item added at the
+-- end may be different than the rest.
+sperse' :: a -> a -> [a] -> [a]
+sperse' y z (x:xs) = y : x : sperse' y z xs
+sperse' _ z [] = [z]
