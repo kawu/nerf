@@ -40,6 +40,7 @@ import qualified Text.NKJP.Morphosyntax as X
 import qualified Text.NKJP.Named as N
 
 import           NLP.Nerf.Types
+import           NLP.Nerf.Utils
 
 
 -----------------------------------------------------------
@@ -141,7 +142,7 @@ teiNeTree (Node n ts) = case n of
         ts' <- teiNeForest ts
         let n' = defNE
                 { N.neID = L.pack (show i)
-                -- , N.neType = L.fromStrict x
+                , N.orth = getOrth ts
                 , N.neType = L.fromStrict
                     $ fromJust' "teiNeTree: unspecified neType"
                     $ M.lookup "type" x
@@ -157,10 +158,22 @@ teiNeTree (Node n ts) = case n of
     fromJust' _ (Just x) = x
     derivType x = N.Deriv { N.derivType = x, N.derivFrom = "" }
 
+
 -- | Make pointer from a node.
 ptrFrom :: Either (N.NE L.Text) (X.Seg L.Text) -> N.Ptr L.Text
 ptrFrom (Left x) = N.Local (N.neID x)
 ptrFrom (Right x) = N.Global (X.segID x) "ann_morphosyntax.xml"
+
+
+-- | Determine the `orth` value.
+getOrth :: NeForest a (X.Seg L.Text) -> L.Text
+getOrth =
+    L.strip . L.concat . map toOrth . concatMap leaves
+  where
+    toOrth :: X.Seg L.Text -> L.Text
+    toOrth X.Seg{..} = if nps
+        then orth
+        else L.cons ' ' orth
 
 
 -- | Default NE.
@@ -271,21 +284,20 @@ nameToFS :: N.NE L.Text -> Tree (Tag L.Text)
 nameToFS N.NE{..} = mkNode "fs" [("type", "named")]
     -- $ sperse breakLine $ catMaybes
     $ catMaybes
-    [ Just $ neAttrToXML "type" neType
-    , neAttrToXML "subtype" <$> subType
-    , neAttrToXML "derivtype" . N.derivType <$> derived ]
+    [ Just $ strToXML "orth" orth
+    , Just $ symToXML "type" neType
+    , symToXML "subtype" <$> subType
+    , symToXML "derivtype" . N.derivType <$> derived ]
 
 
--- neTypeToXML :: L.Text -> Tree (Tag L.Text)
--- neTypeToXML = neAttrToXML "type"
-
-
-neAttrToXML :: L.Text -> L.Text -> Tree (Tag L.Text)
-neAttrToXML attr x = mkNode "f" [("name", attr)]
+symToXML :: L.Text -> L.Text -> Tree (Tag L.Text)
+symToXML attr x = mkNode "f" [("name", attr)]
     [mkNode "symbol" [("value", x)] []]
---     [ breakLine
---     , mkNode "symbol" [("value", x)] []
---     , breakLine ]
+
+
+strToXML :: L.Text -> L.Text -> Tree (Tag L.Text)
+strToXML attr x = mkNode "f" [("name", attr)]
+    [mkNode "string" [] [mkText x]]
 
 
 ptrToXML :: N.Ptr L.Text -> Tree (Tag L.Text)
@@ -313,8 +325,9 @@ prettify
     -> Tree (Tag L.Text)
     -> Tree (Tag L.Text)
 prettify ind acc t = case t of
-    Node x []   -> Node x []
-    Node x xs   -> Node x $
+    Node x []                       -> Node x []
+    Node _ [Node (TagText _) []]    -> t
+    Node x xs                       -> Node x $
         preForest ind acc xs
 
 
