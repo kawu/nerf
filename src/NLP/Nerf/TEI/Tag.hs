@@ -52,6 +52,9 @@ tagCorpus n override nerf srcRoot dstRoot = do
     forM_ paths $ \path -> putMVar pathMVar
         ( srcRoot </> path
         , dstRoot </> path )
+    -- TODO: this is a dirty trick to not exit before
+    -- subthreads finish their job.
+    threadDelay $ 1000 * 10^(6::Int)
 
 
 -- | Run Nerf instance listening on the given MVar for file
