@@ -16,6 +16,8 @@ import           Control.Applicative ((<$>), (<*>))
 import           Control.Arrow (second)
 import           Control.Monad (forM_)
 import           Control.Concurrent (getNumCapabilities)
+import qualified Control.Exception as Exc
+-- import           Control.Spoon (teaspoon)
 import           Data.Maybe (catMaybes)
 -- import           Data.Binary (encodeFile, decodeFile)
 import           Data.Text.Binary ()
@@ -24,6 +26,7 @@ import qualified Data.Foldable as F
 import qualified Data.Map as M
 import qualified Numeric.SGD as SGD
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import qualified Data.Text.Lazy as L
 import qualified Data.Text.Lazy.IO as L
 import qualified Data.DAWG.Static as D
@@ -483,8 +486,11 @@ exec TEI2XCES{..} = do
 exec Sync{..} = do
     xces1 <- XCES2.parseXCES <$> L.readFile xcesPath1 
     xces2 <- XCES2.parseXCES <$> L.readFile xcesPath2
-    forM_ (zip xces1 xces2) $ \(par1, par2) -> do
-        putStrLn "################################"
+    forM_ (zip xces1 xces2) $ \(par1, par2) -> spoon $ do
+--         putStrLn "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
+--         forM_ par1 putSent
+--         putStrLn ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+--         forM_ par2 putSent
         let xs = Sync.sync Sync.sentLen Sync.sentLen par1 par2
         forM_ xs $ \(x, y) -> do
             let nes  = concat x
@@ -493,7 +499,10 @@ exec Sync{..} = do
             L.putStrLn $ XCES2.showXCES [[nes']]
                 
             -- print (length x, length y)
-
+  where
+    putSent = T.putStrLn . toText . concatMap Util.leaves
+    toText  = T.concat . map (maybe "" orth)
+    orth x  = T.append " " $ XCES2.orth x
 
 -- readRaw :: FilePath -> IO [L.Text]
 -- readRaw = fmap L.lines . L.readFile
@@ -527,3 +536,14 @@ withParts paths handler = Temp.withSystemTempFile "train." $ \tempPath _h -> do
 enumDivs :: [a] -> [(a, [a])]
 enumDivs []     = []
 enumDivs (x:xs) = (x, xs) : map (second (x:)) (enumDivs xs)
+
+
+----------------------------------------
+-- Misc
+----------------------------------------
+
+
+spoon :: IO () -> IO ()
+spoon x =
+    let handler exc = return ()  `const`  (exc :: Exc.ErrorCall)
+    in  Exc.catch x handler

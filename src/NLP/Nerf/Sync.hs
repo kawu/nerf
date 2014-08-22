@@ -31,7 +31,7 @@ import           NLP.Nerf.ID
 import           NLP.Nerf.NeSet
 import           NLP.Nerf.Utils
 
-import           Debug.Trace (trace)
+-- import           Debug.Trace (trace)
 
 
 ---------------------------------------------------------------
@@ -128,7 +128,8 @@ syncNeForest seg1Len seg2Len sent tok2 =
 
     -- trace (show $ toNeSet sentID) result
     -- trace (show $ replIDs syncMap $ toNeSet sentID) result
-    trace (show neSet) result
+    -- trace (show neSet) result
+    result
 
   where
 
