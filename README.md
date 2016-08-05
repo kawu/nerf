@@ -14,31 +14,16 @@ The extended IOB method also provides the inverse encoding function which is
 needed during the model training.
 
 
-Building Nerf
+Installation
 =============
 
-You will need the [Glasgow Haskell Compiler](http://www.haskell.org/ghc/)
-and the [Cabal](http://www.haskell.org/cabal/) tool to build Nerf.
-The easiest way to get both GHC and Cabal is to install the latest
-[Haskell Platform](http://www.haskell.org/platform/).
+It is recommanded to install *nerf* using the
+[Haskell Tool Stack][stack], which you will need to downoload and
+install on your machine beforehand.  Then clone this repository into
+a local directory and use `stack` to install the library by running:
 
-To install Nerf from the official
-[Hackage](http://hackage.haskell.org/package/nerf)
-repository just run:
+    stack install
 
-    cabal install nerf
-
-If you want to update Nerf to a newer version you should update the package
-list first:
-
-    cabal update
-    cabal install nerf
-
-To install the latest development version from github just run
-
-    cabal install
-
-from the `nerf` top level directory.
 
 Data formats
 ============
@@ -160,4 +145,5 @@ port number will be used).
 Run `nerf client --help` to learn more about the possible client-mode options.
 
 
+[stack]: http://docs.haskellstack.org "Haskell Tool Stack"
 [ghc-rts]: http://www.haskell.org/ghc/docs/latest/html/users_guide/runtime-control.html "GHC runtime system options"
