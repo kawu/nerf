@@ -49,9 +49,9 @@ flatten schema forest =
 
 -- | Tokenize sentence with the Nerf tokenizer.
 reTokenize :: N.NeForest NE Word -> N.NeForest NE Word
-reTokenize ft = 
+reTokenize ft =
     sync ft ((doTok . leaves) ft)
-  where 
+  where
     doTok  = map T.pack . tokenize . intercalate " "  . map T.unpack
     leaves = concatMap $ foldMap (either (const []) (:[]))
 
@@ -65,7 +65,7 @@ drawSent :: CRF.SentL Ob Lb -> IO ()
 drawSent sent = do
     let unDist (x, y) = (x, CRF.unDist y)
     mapM_ (print . unDist) sent
-    putStrLn "" 
+    putStrLn ""
 
 -- | Show results of observation extraction on the input ENAMEX file.
 tryOx :: SchemaConf -> FilePath -> IO ()

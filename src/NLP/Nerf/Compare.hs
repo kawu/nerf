@@ -98,7 +98,7 @@ toIDs ts = flip ST.evalState 0 $ forM ts $ Tr.mapM $ \e -> case e of
         return $ Right (i, i + k)
 
 
--- | Extract the set of nodes from the NE forest.  
+-- | Extract the set of nodes from the NE forest.
 nodesF :: Ord a => N.NeForest a (Int, Int) -> S.Set (Node a)
 nodesF = S.unions . map nodesT
 

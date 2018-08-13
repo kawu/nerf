@@ -2,6 +2,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE LambdaCase #-}
+
 
 import           System.Console.CmdArgs
 import           System.IO
@@ -23,8 +25,10 @@ import qualified Data.Foldable as F
 import qualified Data.Map as M
 import qualified Numeric.SGD as SGD
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import qualified Data.Text.Lazy as L
 import qualified Data.Text.Lazy.IO as L
+import qualified Data.ByteString.Lazy as BL
 import qualified Data.DAWG.Static as D
 
 import           NLP.Nerf (train, ner, tryOx)
@@ -37,6 +41,9 @@ import qualified NLP.Nerf.Server as S
 
 import           NLP.Nerf.Compare ((.+.))
 import qualified NLP.Nerf.Compare as C
+
+-- import qualified NLP.Nerf.Offset as Off
+import qualified NLP.Nerf.PolEval as PE
 
 
 -- | Default port number.
@@ -104,6 +111,8 @@ data Nerf
   | Compare
     { dataPath      :: FilePath
     , dataPath'     :: FilePath }
+  | PolEval
+    { inModel       :: FilePath }
   deriving (Data, Typeable, Show)
 
 
@@ -148,6 +157,12 @@ nerMode = NER
         , XCES &= help "XCES" ] }
 
 
+polEvalMode :: Nerf
+polEvalMode = PolEval
+    { inModel  = def &= argPos 0 &= typ "MODEL-FILE"
+    }
+
+
 serverMode :: Nerf
 serverMode = Server
     { inModel = def &= argPos 0 &= typ "MODEL-FILE"
@@ -181,7 +196,7 @@ cmpMode = Compare
 
 argModes :: Mode (CmdArgs Nerf)
 argModes = cmdArgsMode $ modes
-    [trainMode, cvMode, nerMode, serverMode, clientMode, cmpMode, oxMode]
+    [trainMode, cvMode, nerMode, polEvalMode, serverMode, clientMode, cmpMode, oxMode]
 
 
 data Resources = Resources
@@ -281,6 +296,29 @@ exec NER{..} = case format of
     XCES -> do
         nerf <- decodeFile inModel
         L.putStrLn . XCES.nerXCES (ner nerf) =<< L.getContents
+
+
+-- exec PolEval{..} = do
+--   nerf <- decodeFile inModel
+--   inp  <- L.lines <$> L.getContents
+--   forM_ inp $ \sent -> do
+--     let forest = ner nerf (L.unpack sent)
+--         forest' = Off.addOffsetInfo (L.toStrict sent) forest
+--     forM_ forest' $ \tree -> F.forM_ tree $ \case
+--       Right _ -> return ()
+--       Left Off.Offset{..} -> do
+--         T.putStr ann
+--         putStr "\t"
+--         putStr (show beg)
+--         putStr "\t"
+--         putStrLn (show end)
+
+
+exec PolEval{..} = do
+  nerf <- decodeFile inModel
+  inp <- BL.getContents
+  let out = PE.processJSON nerf inp
+  BL.putStr out
 
 
 exec Server{..} = do

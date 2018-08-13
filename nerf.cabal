@@ -49,6 +49,7 @@ library
       , network             >= 2.3      && < 2.7
       , cmdargs             >= 0.10     && < 0.11
       , IntervalMap         >= 0.3      && < 0.4
+      , aeson               >= 0.8      && < 1.5
 
     exposed-modules:
         NLP.Nerf
@@ -64,6 +65,8 @@ library
       , NLP.Nerf.Compare
       , NLP.Nerf.Server
       , NLP.Nerf.XCES
+      , NLP.Nerf.Offset
+      , NLP.Nerf.PolEval
 
     ghc-options: -Wall -O2
 
