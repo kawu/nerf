@@ -32,6 +32,26 @@ data Offset a = Offset
   } deriving (Show, Eq, Ord)
 
 
+-- -- | An alternative version of `addOffsetInfo` which interprets double newline
+-- -- characters as separators between paragraphs. Paragraphs are processed
+-- -- separately and information about offsets is (supposed to be) handled
+-- -- accordingly.
+-- addOffsetInfo'
+--   :: T.Text
+--      -- ^ The original sentence
+--   -> N.NeForest a T.Text
+--      -- ^ The sentence with NE annotations
+--   -> N.NeForest (Offset a) Token
+-- addOffsetInfo' sent ts
+--   = pullOffsetInfo
+--   . flip ST.evalState (stateInit sent)
+--   . forM ts . Tr.mapM $ \e -> case e of
+--     Left x  -> return (Left x)
+--     Right x -> do
+--       tok <- consume x
+--       return $ Right tok
+
+
 -- | Add information about offsets to the individual tokens.
 addOffsetInfo
   :: T.Text

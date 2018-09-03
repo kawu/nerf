@@ -72,7 +72,10 @@ processJSON nerf inpTxt =
       '.' -> '_'
       c -> c
     process inp@Input{..} =
-      let forest = Nerf.ner nerf (T.unpack text)
+      let forest
+            = concatMap (Nerf.ner nerf . T.unpack)
+            . T.splitOn "\n\n"
+            $ text
           forest' = Off.addOffsetInfo text forest
           ans = T.unlines
             [ T.concat
@@ -88,3 +91,38 @@ processJSON nerf inpTxt =
             , Left Off.Offset{..} <- R.flatten tree
             ]
       in  inp {answers = ans}
+
+
+-- -- | Process input.
+-- processJSON
+--   :: Nerf.Nerf
+--   -- ^ Model
+--   -> BL.ByteString
+--   -- ^ The encoded JSON to process
+--   -> BL.ByteString
+--   -- ^ Processed JSON
+-- processJSON nerf inpTxt =
+--   case JSON.decode inpTxt of
+--     Nothing -> error "PolEval: failed to decode JSON"
+--     Just inputs -> JSON.encode (map process inputs)
+--   where
+--     dot2underscore = T.map $ \case
+--       '.' -> '_'
+--       c -> c
+--     process inp@Input{..} =
+--       let forest = Nerf.ner nerf (T.unpack text)
+--           forest' = Off.addOffsetInfo text forest
+--           ans = T.unlines
+--             [ T.concat
+--               [ dot2underscore ann
+--               , " "
+--               , T.pack $ show beg
+--               , " "
+--               , T.pack $ show end
+--               , "\t"
+--               , T.take (end - beg) (T.drop beg text)
+--               ]
+--             | tree <- forest'
+--             , Left Off.Offset{..} <- R.flatten tree
+--             ]
+--       in  inp {answers = ans}
