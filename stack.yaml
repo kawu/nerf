@@ -37,7 +37,7 @@ resolver: lts-14.12
 packages:
 - .
 # - ../polimorf
-# - ../data-named
+- ../data-named
 
 # Dependency packages to be pulled from upstream that are not in the resolver
 # using the same syntax as the packages field.
@@ -45,7 +45,7 @@ packages:
 # extra-deps: []
 extra-deps:
 - crf-chain1-0.2.3
-- data-named-0.6.2
+# - data-named-0.6.2
 - dawg-0.8.2
 - monad-ox-0.2.0
 - polimorf-0.7.4
