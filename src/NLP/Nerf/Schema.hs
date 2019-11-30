@@ -39,6 +39,8 @@ module NLP.Nerf.Schema
 , dictB
 ) where
 
+import           Prelude hiding (Word)
+
 import Control.Applicative ((<$>), (<*>))
 import Control.Monad (forM_, join)
 import Data.Maybe (maybeToList)

@@ -7,6 +7,8 @@ module NLP.Nerf.Types
 , Lb
 ) where
 
+import           Prelude hiding (Word)
+
 import qualified Data.Text as T
 import qualified Data.Named.IOB as IOB
 

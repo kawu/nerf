@@ -36,28 +36,28 @@ resolver: lts-14.12
 #  - wai
 packages:
 - .
+# - ../polimorf
+# - ../data-named
 
 # Dependency packages to be pulled from upstream that are not in the resolver
 # using the same syntax as the packages field.
 # (e.g., acme-missiles-0.3)
 # extra-deps: []
 extra-deps:
-- crf-chain1-0.2.2
-- data-named-0.5.2
-- dawg-0.8.1
+- crf-chain1-0.2.3
+- data-named-0.6.2
+- dawg-0.8.2
 - monad-ox-0.2.0
-- polimorf-0.6.0
-- polysoup-0.2.0
-- sgd-0.2.2
-- tokenize-0.1.3
-- data-lens-2.10.7
+- polimorf-0.7.4
+- polysoup-0.2.2
+- sgd-0.2.3
+- tokenize-0.3.0
 - logfloat-0.13.3.3
-- monad-codec-0.2.0
-- vector-binary-0.1.1
-- IntervalMap-0.3.0.3
+- monad-codec-0.2.1
+# - IntervalMap-0.3.0.3
 # - temporary-1.1.2.5
-- polyparse-1.9
-- base-orphans-0
+- polyparse-1.13
+# - base-orphans-0
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

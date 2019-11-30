@@ -10,6 +10,8 @@ module NLP.Nerf.XCES
 ) where
 
 
+import           Prelude hiding (Word)
+
 import qualified Data.Text.Lazy as L
 import           Data.List (intercalate, intersperse)
 import           Data.Char (isSpace)

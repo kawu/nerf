@@ -1,5 +1,5 @@
 name:                nerf
-version:             0.5.5
+version:             0.5.4
 github:              "kawu/nerf"
 license:             BSD3
 author:              "Jakub Waszczuk"
@@ -30,49 +30,30 @@ dependencies:
 - tagsoup             >= 0.13     && < 0.15
 - polysoup            >= 0.2      && < 0.3
 - crf-chain1          >= 0.2      && < 0.3
-- data-named          >= 0.5.1    && < 0.6
+- data-named          >= 0.6.1    && < 0.7
 - monad-ox            >= 0.2      && < 0.3
-- sgd                 >= 0.2.1    && < 0.3
-- polimorf            >= 0.6.0    && < 0.7
-- dawg                >= 0.8.1    && < 0.9
-- tokenize            == 0.1.3
+- sgd                 >= 0.2.3    && < 0.3
+- polimorf            >= 0.7.4    && < 0.8
+- dawg                >= 0.8.2    && < 0.9
+# - tokenize            == 0.1.3
+- tokenize            == 0.3.0
 - mtl                 >= 2.1      && < 2.3
 - network             >= 2.3      && < 2.9
 - cmdargs             >= 0.10     && < 0.11
-- IntervalMap         >= 0.3      && < 0.4
-
-# - text >= 1.2 && < 1.3
-# - deepseq >= 1.4 && < 1.5
-# - binary >= 0.8 && < 0.9
-# - containers >= 0.5 && < 0.7
-# - directory >= 1.3 && < 1.4
-# - filepath >= 1.4 && < 1.5
-# - transformers >= 0.5 && < 0.6
-# - random-shuffle >= 0.0 && < 0.1
+- IntervalMap         >= 0.6      && < 0.7
 
 library:
   source-dirs: src
 
-executables:
-  nerf:
-    main:                nerf.hs
-    source-dirs:         tools
-    ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - filepath            >= 1.3      && < 1.5
-    - directory           >= 1.1      && < 1.4
-    - temporary           >= 1.1      && < 1.4
-
-# tests:
-#   cupt-test:
-#     main:                Spec.hs
-#     source-dirs:         test
+# executables:
+#   nerf:
+#     main:                Main.hs
+#     source-dirs:         app
 #     ghc-options:
 #     - -threaded
 #     - -rtsopts
 #     - -with-rtsopts=-N
 #     dependencies:
-#     - cupt
+#     - filepath            >= 1.3      && < 1.5
+#     - directory           >= 1.1      && < 1.4
+#     - temporary           >= 1.1      && < 1.4

@@ -11,6 +11,8 @@ module NLP.Nerf
 , module NLP.Nerf.Types
 ) where
 
+import           Prelude hiding (Word)
+
 import Control.Applicative ((<$>), (<*>))
 import Data.Binary (Binary, put, get)
 import Data.Foldable (foldMap)

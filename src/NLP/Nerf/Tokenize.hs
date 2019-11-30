@@ -16,6 +16,8 @@ module NLP.Nerf.Tokenize
 ) where
 
 
+import           Prelude hiding (Word)
+
 import           Control.Arrow (second)
 import           Control.Monad ((>=>))
 import qualified Data.Char as Char
@@ -141,7 +143,7 @@ replaceToks ivMap nes
   where
     replace im (Left x) = (im, Left x)
     replace im (Right (ran, _)) =
-        let rsXs = I.intersecting im ran
+        let rsXs = I.assocs $ I.intersecting im ran
             im'  = L.foldl' (flip I.delete) im (map fst rsXs)
         in  (im', Right rsXs)
 

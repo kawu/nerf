@@ -7,6 +7,7 @@ module NLP.Nerf.Server
 , ner
 ) where
 
+import           Prelude hiding (Word)
 
 import           Control.Applicative ((<$>))
 import           Control.Monad (forever, void)
