@@ -41,10 +41,13 @@ The current version of Nerf works with a simple data format in which:
 
 For example:
 
-    <organization>Church of the <deity>Flying Spaghetti Monster</deity></organization>
+    <organization>Church of the <deity>Flying Spaghetti Monster</deity></organization> .
 
 Text and label values should be escaped by prepending the `\` character before special
 `>`, `<`, `\` and ` ` (space) characters.
+
+Have a look in the `example` directory for an example of a file in the
+appropriate format.
 
 NER input data
 --------------
@@ -75,11 +78,16 @@ the Nerf model using the following command:
 Run `nerf train --help` to learn more about the program arguments and possible
 training options.
 
+**WARNING**: The `-N` runtime option currently leads to errors in the training
+process and therefore should be not used for the time being.
+
+<!---
 The nerf tool can be also supplied with additional 
 [runtime system options](http://www.haskell.org/ghc/docs/latest/html/users_guide/runtime-control.html).
 For example, to train the model using four threads, use:
 
     nerf train train.nes -e eval.nes -o model.bin +RTS -N4
+-->
 
 Dictionaries
 ------------
