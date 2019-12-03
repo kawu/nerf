@@ -17,7 +17,7 @@
 #
 # resolver: ./custom-snapshot.yaml
 # resolver: https://example.com/snapshots/2018-01-01.yaml
-resolver: lts-14.12
+resolver: lts-14.16
 # resolver: lts-8.12
 # resolver: lts-1.15
 
